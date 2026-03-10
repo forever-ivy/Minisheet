@@ -69,8 +69,17 @@ const gridTheme = {
 
 function editableCellToRaw(value: EditableGridCell): string {
   switch (value.kind) {
-    case GridCellKind.Number:
-      return value.data == null ? '' : String(value.data);
+    case GridCellKind.Number: {
+      if (typeof value.data === 'number' && Number.isFinite(value.data)) {
+        return String(value.data);
+      }
+
+      if ('displayData' in value && typeof value.displayData === 'string') {
+        return value.displayData.replace(/,/g, '').trim();
+      }
+
+      return '';
+    }
     case GridCellKind.Text:
     case GridCellKind.Uri:
     case GridCellKind.Markdown:

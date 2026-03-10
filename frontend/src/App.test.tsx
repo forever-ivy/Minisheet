@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import App from './App';
 
@@ -115,7 +115,7 @@ function getFormulaInput() {
   return screen.getByRole('textbox', { name: '公式栏' });
 }
 
-test('renders the green workspace shell with chinese tabs and insight panel', async () => {
+test('renders the green workspace shell without the insight panel', async () => {
   render(<App />);
 
   await screen.findByText('已自动保存');
@@ -126,7 +126,8 @@ test('renders the green workspace shell with chinese tabs and insight panel', as
   expect(screen.getByRole('button', { name: '数据' })).toBeInTheDocument();
   expect(screen.getByPlaceholderText('搜索命令...')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '导出 DAT' })).toBeInTheDocument();
-  expect(screen.getByText('数据洞察')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '切换洞察面板' })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('数据洞察')).not.toBeInTheDocument();
   expect(screen.getByTestId('green-glide-grid')).toBeInTheDocument();
 });
 
@@ -141,6 +142,11 @@ test('switches action groups when the toolbar tab changes', async () => {
   expect(screen.getByRole('button', { name: '求和' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '平均值' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '导入 CSV' })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: '数据' }));
+
+  expect(screen.getByRole('button', { name: '重新同步' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '切换洞察' })).not.toBeInTheDocument();
 });
 
 test('fills uppercase formulas from the current glide selection without auto-submitting', async () => {
@@ -193,34 +199,13 @@ test('cancels a pending toolbar formula action when Escape is pressed', async ()
   await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
 });
 
-test('updates the insight panel from the current selected numeric range', async () => {
+test('does not render the insight panel even after grid selection changes', async () => {
   render(<App />);
   await screen.findByText('已自动保存');
 
   fireEvent.click(screen.getByRole('button', { name: '模拟选择 B2:C3' }));
 
-  const panel = screen.getByLabelText('数据洞察');
-  await within(panel).findByText('43,200');
-  expect(within(panel).getByText('-24.0%')).toBeInTheDocument();
-});
-
-test('renders a zeroed insight panel when the workbook is empty', async () => {
-  (global.fetch as jest.Mock).mockImplementation(() =>
-    mockJsonResponse({
-      maxRows: 32767,
-      maxCols: 256,
-      computeMs: 0,
-      cells: {},
-    }),
-  );
-
-  render(<App />);
-
-  await screen.findByText('已自动保存');
-  const panel = screen.getByLabelText('数据洞察');
-  expect(panel).toBeInTheDocument();
-  expect(within(panel).getByText('0')).toBeInTheDocument();
-  expect(within(panel).getByText('0.0%')).toBeInTheDocument();
+  expect(screen.queryByLabelText('数据洞察')).not.toBeInTheDocument();
 });
 
 test('submits the formula bar to the current target cell', async () => {
@@ -240,6 +225,26 @@ test('submits the formula bar to the current target cell', async () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ cellId: 'D4', raw: '=ABS(B2)' }),
+      }),
+    ),
+  );
+});
+
+test('submits plain numeric input from the formula bar', async () => {
+  render(<App />);
+  await screen.findByText('已自动保存');
+
+  await act(async () => {
+    fireEvent.change(getFormulaInput(), { target: { value: '123' } });
+    fireEvent.click(screen.getByRole('button', { name: '提交公式' }));
+  });
+
+  await waitFor(() =>
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/cell'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ cellId: 'A1', raw: '123' }),
       }),
     ),
   );

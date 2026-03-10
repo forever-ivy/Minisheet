@@ -7,13 +7,11 @@ import {
   RefreshCw,
   Search,
   Sigma,
-  Sparkles,
   SunMedium,
   Upload,
 } from 'lucide-react';
 
 import { HelpModal } from './components/HelpModal';
-import { InsightPanel } from './components/InsightPanel';
 import { StatusBar } from './components/StatusBar';
 import { GreenGlideGrid } from './spreadsheet/GreenGlideGrid';
 import {
@@ -25,7 +23,6 @@ import {
   WorkbookSnapshot,
   applySelectionToFormula,
   buildFunctionFormula,
-  buildInsightMetric,
   buildSelectionStats,
   cellIdToGridCoords,
   gridCoordsToCellId,
@@ -112,7 +109,6 @@ export default function App() {
   const [workbookTitle, setWorkbookTitle] = useState('未命名');
   const [activeTab, setActiveTab] = useState<ToolbarTab>('home');
   const [searchQuery, setSearchQuery] = useState('');
-  const [insightsOpen, setInsightsOpen] = useState(true);
   const [pendingFormulaAction, setPendingFormulaAction] = useState<ToolbarFormulaAction | null>(null);
   const [pendingTargetCellId, setPendingTargetCellId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -384,12 +380,6 @@ export default function App() {
       })),
       data: [
         { key: 'reload', label: '重新同步', icon: RefreshCw, onClick: () => void loadSnapshot() },
-        {
-          key: 'insights',
-          label: '切换洞察',
-          icon: Sparkles,
-          onClick: () => setInsightsOpen((current) => !current),
-        },
       ],
     }),
     [loadSnapshot, handleFormulaToolbar],
@@ -405,11 +395,6 @@ export default function App() {
 
     return currentActions.filter((action) => action.label.includes(query));
   }, [activeTab, searchQuery, toolbarActions]);
-
-  const insightMetric = useMemo(
-    () => buildInsightMetric(snapshot, gridSelection, activeCell),
-    [snapshot, gridSelection, activeCell],
-  );
 
   const selectionStats = useMemo(
     () => buildSelectionStats(snapshot, gridSelection, activeCell),
@@ -472,14 +457,6 @@ export default function App() {
           <div className="user-actions">
             <button type="button" className="help-link" onClick={() => setHelpOpen(true)}>
               帮助
-            </button>
-            <button
-              className="icon-btn dark"
-              type="button"
-              aria-label="切换洞察面板"
-              onClick={() => setInsightsOpen((current) => !current)}
-            >
-              <Sparkles className="icon" />
             </button>
             <button className="icon-btn" type="button" aria-label="刷新快照" onClick={() => void loadSnapshot()}>
               <RefreshCw className="icon" />
@@ -563,15 +540,6 @@ export default function App() {
                 onCellCommit={commitCell}
               />
             </div>
-
-            <InsightPanel
-              metric={insightMetric}
-              stats={selectionStats}
-              rangeRef={rangeRef}
-              visible={insightsOpen}
-              onToggleVisible={() => setInsightsOpen((current) => !current)}
-              onExportDat={handleSaveDat}
-            />
           </div>
 
           <StatusBar

@@ -93,6 +93,8 @@ test('passes Glide grid config and bridges selection/edit hooks', async () => {
   expect(captured.props?.rangeSelect).toBe('rect');
   expect(captured.props?.rowSelect).toBe('none');
   expect(captured.props?.columnSelect).toBe('none');
+  expect(captured.props?.cellActivationBehavior).toBe('single-click');
+  expect(captured.props?.editOnType).toBe(true);
   expect(captured.props?.getCellsForSelection).toBe(true);
   expect(typeof captured.props?.height).toBe('number');
 
@@ -127,4 +129,34 @@ test('passes Glide grid config and bridges selection/edit hooks', async () => {
   });
 
   expect(onCellCommit).toHaveBeenCalledWith('B2', '=A1+1');
+});
+
+test('keeps numeric display text when glide returns a number edit without parsed data', async () => {
+  const onSelectionChange = jest.fn();
+  const onSelectionFinish = jest.fn();
+  const onCellCommit = jest.fn();
+
+  render(
+    <GreenGlideGrid
+      snapshot={snapshot}
+      activeCell={{ row: 0, col: 0, cellId: 'A1' }}
+      selection={{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }}
+      onSelectionChange={onSelectionChange}
+      onSelectionFinish={onSelectionFinish}
+      onCellCommit={onCellCommit}
+    />,
+  );
+
+  await act(async () => {
+    await (captured.props?.onCellEdited as (cell: [number, number], value: {
+      kind: string;
+      data: number;
+      displayData: string;
+    }) => void)(
+      [0, 0],
+      { kind: 'number', data: Number.NaN, displayData: '123' },
+    );
+  });
+
+  expect(onCellCommit).toHaveBeenCalledWith('A1', '123');
 });
