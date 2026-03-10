@@ -1,0 +1,4 @@
+12,3.5,=A1+B1,hello
+=sqrt(A1),=abs(-8),=avg(A1:B1),=sum(A1:B1)
+42,=C1*2,=B2+A3,student
+

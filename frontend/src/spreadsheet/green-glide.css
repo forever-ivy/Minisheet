@@ -1,0 +1,17 @@
+.green-glide-shell {
+  height: 100%;
+  min-height: 0;
+  background: #ffffff;
+}
+
+.green-glide-shell .dvn-underlay {
+  border-radius: 0 0 20px 20px;
+}
+
+.green-glide-shell .gdg-wrap {
+  background: #ffffff;
+}
+
+.green-glide-shell canvas {
+  outline: none;
+}
