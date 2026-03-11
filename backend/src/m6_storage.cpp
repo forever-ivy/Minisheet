@@ -1,3 +1,13 @@
+/**
+ * @file m6_storage.cpp
+ * @brief 存储持久化实现
+ *
+ * 本文件实现：
+ * - CSV 格式导入（兼容 Excel 格式）
+ * - 二进制 DAT 格式序列化/反序列化
+ * - 支持引号和转义的 CSV 解析
+ */
+
 #include "minisheet/m6_storage.h"
 
 #include "minisheet/m1_types.h"
@@ -14,161 +24,205 @@ using namespace std;
 namespace minisheet {
 namespace {
 
-constexpr char kMagic[4] = {'M', 'S', 'H', 'T'};
-constexpr std::uint32_t kVersion = 1;
+// ----------------------------------------------------------------------------
+// DAT 文件格式常量
+// ----------------------------------------------------------------------------
+constexpr char kMagic[4] = {'M', 'S', 'H', 'T'};  // 魔数：Minisheet
+constexpr std::uint32_t kVersion = 1;              // 文件格式版本
 
+// ----------------------------------------------------------------------------
+// 将值追加到字节数组（小端序）
+// ----------------------------------------------------------------------------
 template <typename T>
-void append_value(vector<char>& bytes, T value) {
-  const char* raw = reinterpret_cast<const char*>(&value);
-  bytes.insert(bytes.end(), raw, raw + sizeof(T));
+void append_value(vector<char>& zijie_men, T zhi) {
+  const char* yuanshi = reinterpret_cast<const char*>(&zhi);
+  zijie_men.insert(zijie_men.end(), yuanshi, yuanshi + sizeof(T));
 }
 
+// ----------------------------------------------------------------------------
+// 从字节数组读取值（小端序）
+// ----------------------------------------------------------------------------
 template <typename T>
-T read_value(const vector<char>& bytes, size_t& offset) {
-  if (offset + sizeof(T) > bytes.size()) {
+T read_value(const vector<char>& zijie_men, size_t& pianyi) {
+  if (pianyi + sizeof(T) > zijie_men.size()) {
     throw runtime_error("corrupt dat file");
   }
 
-  T value {};
-  std::memcpy(&value, bytes.data() + offset, sizeof(T));
-  offset += sizeof(T);
-  return value;
+  T zhi {};
+  std::memcpy(&zhi, zijie_men.data() + pianyi, sizeof(T));
+  pianyi += sizeof(T);
+  return zhi;
 }
 
-vector<string> parse_csv_row(const string& line) {
-  string normalized = line;
-  if (!normalized.empty() && normalized.back() == '\r') {
-    normalized.pop_back();
+// ----------------------------------------------------------------------------
+// 解析 CSV 行
+// 处理规则：
+// - 支持引号包裹的字段
+// - 支持双引号转义（"" 表示 "）
+// - 正确处理包含逗号的字段
+// ----------------------------------------------------------------------------
+vector<string> parse_csv_row(const string& yi_hang) {
+  string guifanhou = yi_hang;
+  if (!guifanhou.empty() && guifanhou.back() == '\r') {
+    guifanhou.pop_back();
   }
 
-  vector<string> values;
-  string current;
-  bool in_quotes = false;
+  vector<string> zhiduan_men;
+  string dangqian_zhiduan;
+  bool zai_yinhao_nei = false;
 
-  for (size_t index = 0; index < normalized.size(); ++index) {
-    char ch = normalized[index];
-    if (ch == '"') {
-      if (in_quotes && index + 1 < normalized.size() && normalized[index + 1] == '"') {
-        current.push_back('"');
-        index += 1;
+  for (size_t xiabiao = 0; xiabiao < guifanhou.size(); ++xiabiao) {
+    char zifu = guifanhou[xiabiao];
+    if (zifu == '"') {
+      // 检查是否是转义引号 ("")
+      if (zai_yinhao_nei && xiabiao + 1 < guifanhou.size() && guifanhou[xiabiao + 1] == '"') {
+        dangqian_zhiduan.push_back('"');
+        xiabiao += 1;
       } else {
-        in_quotes = !in_quotes;
+        // 切换引号状态
+        zai_yinhao_nei = !zai_yinhao_nei;
       }
-    } else if (ch == ',' && !in_quotes) {
-      values.push_back(current);
-      current.clear();
+    } else if (zifu == ',' && !zai_yinhao_nei) {
+      // 字段分隔符（不在引号内）
+      zhiduan_men.push_back(dangqian_zhiduan);
+      dangqian_zhiduan.clear();
     } else {
-      current.push_back(ch);
+      dangqian_zhiduan.push_back(zifu);
     }
   }
 
-  values.push_back(current);
-  return values;
+  zhiduan_men.push_back(dangqian_zhiduan);
+  return zhiduan_men;
 }
 
 }  // namespace
 
-Workbook load_csv(const std::string& path) {
-  ifstream input(path);
-  if (!input) {
+// ----------------------------------------------------------------------------
+// 从 CSV 文件加载工作簿
+// 行号从 1 开始，列号从 1 开始对应 CSV 的第 1 列
+// ----------------------------------------------------------------------------
+Workbook load_csv(const std::string& lujing) {
+  ifstream shuru(lujing);
+  if (!shuru) {
     throw runtime_error("failed to open csv");
   }
 
-  Workbook workbook;
-  string line;
-  int row = 1;
-  while (std::getline(input, line)) {
-    vector<string> values = parse_csv_row(line);
-    for (size_t column = 0; column < values.size() && column < static_cast<size_t>(kMaxColumns);
-         ++column) {
-      if (!values[column].empty()) {
-        workbook.set_cell(to_cell_id({row, static_cast<int>(column) + 1}), values[column]);
+  Workbook gongzuobu;
+  string yi_hang;
+  int hang = 1;
+  while (std::getline(shuru, yi_hang)) {
+    vector<string> zhiduan_men = parse_csv_row(yi_hang);
+    for (size_t lie = 0; lie < zhiduan_men.size() && lie < static_cast<size_t>(kMaxColumns); ++lie) {
+      if (!zhiduan_men[lie].empty()) {
+        gongzuobu.set_cell(to_cell_id({hang, static_cast<int>(lie) + 1}), zhiduan_men[lie]);
       }
     }
-    row += 1;
-    if (row > kMaxRows) {
+    hang += 1;
+    if (hang > kMaxRows) {
       break;
     }
   }
 
-  workbook.recalculate_all();
-  return workbook;
+  gongzuobu.recalculate_all();
+  return gongzuobu;
 }
 
-vector<char> serialize_workbook(const Workbook& workbook) {
-  vector<char> bytes;
-  bytes.insert(bytes.end(), kMagic, kMagic + 4);
-  append_value<std::uint32_t>(bytes, kVersion);
+// ----------------------------------------------------------------------------
+// 将工作簿序列化为二进制格式
+// DAT 文件格式：
+// - 4 bytes: 魔数 "MSHT"
+// - 4 bytes: 版本号 (uint32)
+// - 4 bytes: 单元格数量 (uint32)
+// - 每个单元格：
+//   - 2 bytes: 行号 (uint16)
+//   - 2 bytes: 列号 (uint16)
+//   - 1 byte:  类型 (uint8)
+//   - 4 bytes: 原始内容长度 (uint32)
+//   - N bytes: 原始内容
+// ----------------------------------------------------------------------------
+vector<char> serialize_workbook(const Workbook& gongzuobu) {
+  vector<char> zijie_men;
+  zijie_men.insert(zijie_men.end(), kMagic, kMagic + 4);
+  append_value<std::uint32_t>(zijie_men, kVersion);
 
-  vector<string> ids = workbook.ordered_cell_ids();
-  append_value<std::uint32_t>(bytes, static_cast<std::uint32_t>(ids.size()));
+  vector<string> id_men = gongzuobu.ordered_cell_ids();
+  append_value<std::uint32_t>(zijie_men, static_cast<std::uint32_t>(id_men.size()));
 
-  for (const string& id : ids) {
-    const CellRecord& cell = workbook.cell(id);
-    CellCoord coord = parse_cell_id(id);
-    append_value<std::uint16_t>(bytes, static_cast<std::uint16_t>(coord.row));
-    append_value<std::uint16_t>(bytes, static_cast<std::uint16_t>(coord.column));
-    append_value<std::uint8_t>(bytes, static_cast<std::uint8_t>(cell.kind));
-    append_value<std::uint32_t>(bytes, static_cast<std::uint32_t>(cell.raw.size()));
-    bytes.insert(bytes.end(), cell.raw.begin(), cell.raw.end());
+  for (const string& danyuange_id : id_men) {
+    const CellRecord& danyuange = gongzuobu.cell(danyuange_id);
+    CellCoord zuobiao = parse_cell_id(danyuange_id);
+    append_value<std::uint16_t>(zijie_men, static_cast<std::uint16_t>(zuobiao.hang));
+    append_value<std::uint16_t>(zijie_men, static_cast<std::uint16_t>(zuobiao.lie));
+    append_value<std::uint8_t>(zijie_men, static_cast<std::uint8_t>(danyuange.leixing));
+    append_value<std::uint32_t>(zijie_men, static_cast<std::uint32_t>(danyuange.yuanshi.size()));
+    zijie_men.insert(zijie_men.end(), danyuange.yuanshi.begin(), danyuange.yuanshi.end());
   }
 
-  return bytes;
+  return zijie_men;
 }
 
-Workbook deserialize_workbook(const vector<char>& bytes) {
-  if (bytes.size() < 12) {
+// ----------------------------------------------------------------------------
+// 从二进制数据反序列化工作簿
+// ----------------------------------------------------------------------------
+Workbook deserialize_workbook(const vector<char>& zijie_men) {
+  if (zijie_men.size() < 12) {
     throw runtime_error("dat file too small");
   }
 
-  if (!std::equal(bytes.begin(), bytes.begin() + 4, kMagic)) {
+  if (!std::equal(zijie_men.begin(), zijie_men.begin() + 4, kMagic)) {
     throw runtime_error("invalid dat header");
   }
 
-  size_t offset = 4;
-  std::uint32_t version = read_value<std::uint32_t>(bytes, offset);
-  if (version != kVersion) {
+  size_t pianyi = 4;
+  std::uint32_t banben = read_value<std::uint32_t>(zijie_men, pianyi);
+  if (banben != kVersion) {
     throw runtime_error("unsupported dat version");
   }
 
-  std::uint32_t count = read_value<std::uint32_t>(bytes, offset);
-  Workbook workbook;
-  for (std::uint32_t index = 0; index < count; ++index) {
-    std::uint16_t row = read_value<std::uint16_t>(bytes, offset);
-    std::uint16_t column = read_value<std::uint16_t>(bytes, offset);
-    std::uint8_t kind = read_value<std::uint8_t>(bytes, offset);
-    std::uint32_t raw_size = read_value<std::uint32_t>(bytes, offset);
-    if (offset + raw_size > bytes.size()) {
+  std::uint32_t ge_shu = read_value<std::uint32_t>(zijie_men, pianyi);
+  Workbook gongzuobu;
+  for (std::uint32_t xuhao = 0; xuhao < ge_shu; ++xuhao) {
+    std::uint16_t hang = read_value<std::uint16_t>(zijie_men, pianyi);
+    std::uint16_t lie = read_value<std::uint16_t>(zijie_men, pianyi);
+    std::uint8_t leixing = read_value<std::uint8_t>(zijie_men, pianyi);
+    std::uint32_t yuanshi_changdu = read_value<std::uint32_t>(zijie_men, pianyi);
+    if (pianyi + yuanshi_changdu > zijie_men.size()) {
       throw runtime_error("corrupt dat record");
     }
 
-    string raw(bytes.data() + offset, bytes.data() + offset + raw_size);
-    offset += raw_size;
-    (void)kind;
-    workbook.set_cell(to_cell_id({static_cast<int>(row), static_cast<int>(column)}), raw);
+    string yuanshi(zijie_men.data() + pianyi, zijie_men.data() + pianyi + yuanshi_changdu);
+    pianyi += yuanshi_changdu;
+    (void)leixing;
+    gongzuobu.set_cell(to_cell_id({static_cast<int>(hang), static_cast<int>(lie)}), yuanshi);
   }
 
-  workbook.recalculate_all();
-  return workbook;
+  gongzuobu.recalculate_all();
+  return gongzuobu;
 }
 
-void save_dat(const std::string& path, const Workbook& workbook) {
-  vector<char> bytes = serialize_workbook(workbook);
-  ofstream output(path, ios::binary);
-  if (!output) {
+// ----------------------------------------------------------------------------
+// 保存工作簿到 DAT 文件
+// ----------------------------------------------------------------------------
+void save_dat(const std::string& lujing, const Workbook& gongzuobu) {
+  vector<char> zijie_men = serialize_workbook(gongzuobu);
+  ofstream shuchu(lujing, ios::binary);
+  if (!shuchu) {
     throw runtime_error("failed to open dat for writing");
   }
-  output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  shuchu.write(zijie_men.data(), static_cast<std::streamsize>(zijie_men.size()));
 }
 
-Workbook load_dat(const std::string& path) {
-  ifstream input(path, ios::binary);
-  if (!input) {
+// ----------------------------------------------------------------------------
+// 从 DAT 文件加载工作簿
+// ----------------------------------------------------------------------------
+Workbook load_dat(const std::string& lujing) {
+  ifstream shuru(lujing, ios::binary);
+  if (!shuru) {
     throw runtime_error("failed to open dat for reading");
   }
 
-  vector<char> bytes((istreambuf_iterator<char>(input)), istreambuf_iterator<char>());
-  return deserialize_workbook(bytes);
+  vector<char> zijie_men((istreambuf_iterator<char>(shuru)), istreambuf_iterator<char>());
+  return deserialize_workbook(zijie_men);
 }
 
 }  // namespace minisheet

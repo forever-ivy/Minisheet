@@ -9,7 +9,6 @@ type StatusBarProps = {
   rangeRef: string;
   stats: SelectionStats;
   nonEmptyCount: number;
-  computeMs: number;
 };
 
 export function StatusBar({
@@ -19,7 +18,6 @@ export function StatusBar({
   rangeRef,
   stats,
   nonEmptyCount,
-  computeMs,
 }: StatusBarProps) {
   return (
     <footer className="status-bar" aria-label="状态栏">
@@ -53,7 +51,6 @@ export function StatusBar({
 
       <div className="status-right">
         <span>{nonEmptyCount} 个非空单元格</span>
-        <span>{computeMs.toFixed(2)} ms</span>
       </div>
     </footer>
   );

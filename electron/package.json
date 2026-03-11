@@ -1,0 +1,27 @@
+{
+  "name": "minisheet-desktop",
+  "productName": "Minisheet",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "build:backend": "node ./scripts/build-backend.cjs",
+    "build:icons": "node ./scripts/generate-icons.cjs",
+    "build:renderer": "node ./scripts/build-renderer.cjs",
+    "prepare:desktop": "node ./scripts/prepare-make.cjs",
+    "dev:renderer": "npm --prefix ../frontend start",
+    "dev:app": "npm run build:icons && npm run build:backend && wait-on tcp:3000 && cross-env MINISHEET_RENDERER_URL=http://127.0.0.1:3000 electron-forge start",
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:app\"",
+    "make": "npm run prepare:desktop && electron-forge make",
+    "make:mac": "cross-env MINISHEET_TARGET_PLATFORM=darwin MINISHEET_TARGET_ARCH=arm64 npm run prepare:desktop && cross-env MINISHEET_TARGET_PLATFORM=darwin MINISHEET_TARGET_ARCH=arm64 electron-forge make --platform=darwin --arch=arm64",
+    "make:win": "cross-env MINISHEET_TARGET_PLATFORM=win32 MINISHEET_TARGET_ARCH=x64 npm run prepare:desktop && cross-env MINISHEET_TARGET_PLATFORM=win32 MINISHEET_TARGET_ARCH=x64 electron-forge make --platform=win32 --arch=x64"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.1",
+    "@electron-forge/maker-zip": "7.11.1",
+    "concurrently": "9.2.1",
+    "cross-env": "10.1.0",
+    "electron": "41.0.0",
+    "wait-on": "9.0.4"
+  }
+}

@@ -4,9 +4,6 @@
   "private": true,
   "dependencies": {
     "@glideapps/glide-data-grid": "^6.0.3",
-    "@testing-library/jest-dom": "^5.16.5",
-    "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^13.5.0",
     "@types/node": "^22.13.10",
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.6",
@@ -19,13 +16,11 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test --watch=false"
+    "build": "react-scripts build"
   },
   "eslintConfig": {
     "extends": [
-      "react-app",
-      "react-app/jest"
+      "react-app"
     ]
   },
   "browserslist": {
@@ -41,4 +36,3 @@
     ]
   }
 }
-

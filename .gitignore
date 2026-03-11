@@ -1,6 +1,9 @@
 .DS_Store
 backend/build/
+backend/build-win32-x64/
 frontend/node_modules/
 frontend/build/
 frontend/coverage/
-
+electron/node_modules/
+electron/out/
+electron/assets/

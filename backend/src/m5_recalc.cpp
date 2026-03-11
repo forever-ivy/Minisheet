@@ -1,10 +1,20 @@
+/**
+ * @file m5_recalc.cpp
+ * @brief 公式重计算引擎
+ *
+ * 本文件实现：
+ * - 递归求值公式单元格
+ * - 范围计算（SUM/AVG）
+ * - 循环依赖检测
+ * - 全量重计算和增量重计算
+ */
+
 #include "minisheet/m5_recalc.h"
 
 #include "minisheet/m3_display.h"
 #include "minisheet/m4_formula.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <vector>
 
@@ -13,98 +23,130 @@ using namespace std;
 namespace minisheet {
 namespace {
 
-bool contains_id(const vector<string>& ids, const string& id) {
-  return find(ids.begin(), ids.end(), id) != ids.end();
+// ----------------------------------------------------------------------------
+// 检查 ID 是否在列表中
+// ----------------------------------------------------------------------------
+bool contains_id(const vector<string>& id_men, const string& danyuange_id) {
+  return find(id_men.begin(), id_men.end(), danyuange_id) != id_men.end();
 }
 
-void forget_id(vector<string>& ids, const string& id) {
-  ids.erase(remove(ids.begin(), ids.end(), id), ids.end());
+// ----------------------------------------------------------------------------
+// 从列表中移除指定 ID
+// ----------------------------------------------------------------------------
+void forget_id(vector<string>& id_men, const string& danyuange_id) {
+  id_men.erase(remove(id_men.begin(), id_men.end(), danyuange_id), id_men.end());
 }
 
-void set_formula_error(CellRecord& cell) {
-  cell.error = "#NA";
-  cell.display = "#NA";
-  cell.has_numeric_value = false;
-  cell.numeric_value = 0.0;
+// ----------------------------------------------------------------------------
+// 设置公式错误状态
+// 当公式求值失败时调用
+// ----------------------------------------------------------------------------
+void set_formula_error(CellRecord& danyuange) {
+  danyuange.cuowu = "#NA";
+  danyuange.xianshi = "#NA";
+  danyuange.you_shuzhi = false;
+  danyuange.shuzhi = 0.0;
 }
 
-bool evaluate_cell_numeric(Workbook& workbook,
-                           const string& cell_id,
-                           vector<string>& visiting,
-                           vector<string>& finished,
-                           double& value);
+// 前向声明：求值单元格数值
+bool evaluate_cell_numeric(Workbook& gongzuobu,
+                           const string& danyuange_id,
+                           vector<string>& fangwen_zhong,
+                           vector<string>& yiwancheng,
+                           double& shuzhi);
 
-bool evaluate_range_numeric(Workbook& workbook,
-                            const CellRange& range,
-                            bool average,
-                            vector<string>& visiting,
-                            vector<string>& finished,
-                            double& value) {
-  int min_row = min(range.start.row, range.end.row);
-  int max_row = max(range.start.row, range.end.row);
-  int min_column = min(range.start.column, range.end.column);
-  int max_column = max(range.start.column, range.end.column);
+// ----------------------------------------------------------------------------
+// 求值范围内的数值（用于 SUM/AVG 函数）
+// 遍历范围内的所有单元格，累加数值型单元格的值
+// 参数：
+//   shi_pingjun - true 表示计算平均值，false 表示计算总和
+// ----------------------------------------------------------------------------
+bool evaluate_range_numeric(Workbook& gongzuobu,
+                            const CellRange& fanwei,
+                            bool shi_pingjun,
+                            vector<string>& fangwen_zhong,
+                            vector<string>& yiwancheng,
+                            double& shuzhi) {
+  int zuixiao_hang = min(fanwei.qishi.hang, fanwei.jieshu.hang);
+  int zuida_hang = max(fanwei.qishi.hang, fanwei.jieshu.hang);
+  int zuixiao_lie = min(fanwei.qishi.lie, fanwei.jieshu.lie);
+  int zuida_lie = max(fanwei.qishi.lie, fanwei.jieshu.lie);
 
-  double total = 0.0;
-  int count = 0;
+  double zonghe = 0.0;
+  int shuliang = 0;
 
-  for (int row = min_row; row <= max_row; ++row) {
-    for (int column = min_column; column <= max_column; ++column) {
-      const string current_id = to_cell_id({row, column});
-      if (!workbook.has_cell(current_id)) {
+  for (int hang = zuixiao_hang; hang <= zuida_hang; ++hang) {
+    for (int lie = zuixiao_lie; lie <= zuida_lie; ++lie) {
+      const string dangqian_id = to_cell_id({hang, lie});
+      if (!gongzuobu.has_cell(dangqian_id)) {
         continue;
       }
 
-      const CellRecord& current = workbook.cell(current_id);
+      const CellRecord& dangqian_danyuange = gongzuobu.cell(dangqian_id);
 
-      if (current.kind == CellKind::Empty || current.kind == CellKind::String) {
+      // 跳过空单元格和字符串单元格
+      if (dangqian_danyuange.leixing == CellKind::Empty ||
+          dangqian_danyuange.leixing == CellKind::String) {
         continue;
       }
 
-      double cell_value = 0.0;
-      if (!evaluate_cell_numeric(workbook, current_id, visiting, finished, cell_value)) {
+      double danyuange_shuzhi = 0.0;
+      if (!evaluate_cell_numeric(gongzuobu, dangqian_id, fangwen_zhong, yiwancheng,
+                                 danyuange_shuzhi)) {
         return false;
       }
 
-      total += cell_value;
-      count += 1;
+      zonghe += danyuange_shuzhi;
+      shuliang += 1;
     }
   }
 
-  if (average) {
-    if (count == 0) {
+  if (shi_pingjun) {
+    if (shuliang == 0) {
       return false;
     }
-    value = total / static_cast<double>(count);
+    shuzhi = zonghe / static_cast<double>(shuliang);
     return true;
   }
 
-  value = total;
+  shuzhi = zonghe;
   return true;
 }
 
-bool evaluate_cell_numeric(Workbook& workbook,
-                           const string& cell_id,
-                           vector<string>& visiting,
-                           vector<string>& finished,
-                           double& value) {
-  if (!is_valid_cell_id(cell_id)) {
+// ----------------------------------------------------------------------------
+// 递归求值单元格的数值
+// 处理四种情况：
+// - Empty：返回 0
+// - Integer/Float：直接返回值
+// - String：返回失败
+// - Formula：递归求值公式
+//
+// 循环依赖检测：
+// - fangwen_zhong：当前正在访问的单元格（用于检测循环）
+// - yiwancheng：已经计算完成的单元格（用于缓存）
+// ----------------------------------------------------------------------------
+bool evaluate_cell_numeric(Workbook& gongzuobu,
+                           const string& danyuange_id,
+                           vector<string>& fangwen_zhong,
+                           vector<string>& yiwancheng,
+                           double& shuzhi) {
+  if (!is_valid_cell_id(danyuange_id)) {
     return false;
   }
 
-  if (!workbook.has_cell(cell_id)) {
-    value = 0.0;
+  if (!gongzuobu.has_cell(danyuange_id)) {
+    shuzhi = 0.0;
     return true;
   }
 
-  CellRecord& cell = workbook.mutable_cells().at(cell_id);
-  switch (cell.kind) {
+  CellRecord& danyuange = gongzuobu.mutable_cells().at(danyuange_id);
+  switch (danyuange.leixing) {
     case CellKind::Empty:
-      value = 0.0;
+      shuzhi = 0.0;
       return true;
     case CellKind::Integer:
     case CellKind::Float:
-      value = cell.numeric_value;
+      shuzhi = danyuange.shuzhi;
       return true;
     case CellKind::String:
       return false;
@@ -112,77 +154,90 @@ bool evaluate_cell_numeric(Workbook& workbook,
       break;
   }
 
-  if (contains_id(finished, cell_id)) {
-    if (!cell.has_numeric_value) {
+  // 已缓存结果，直接返回
+  if (contains_id(yiwancheng, danyuange_id)) {
+    if (!danyuange.you_shuzhi) {
       return false;
     }
-    value = cell.numeric_value;
+    shuzhi = danyuange.shuzhi;
     return true;
   }
 
-  if (contains_id(visiting, cell_id)) {
-    set_formula_error(cell);
+  // 检测到循环依赖
+  if (contains_id(fangwen_zhong, danyuange_id)) {
+    set_formula_error(danyuange);
     return false;
   }
 
-  visiting.push_back(cell_id);
-  FormulaEvalResult eval_result = evaluate_formula(
-      cell.raw,
-      [&](const string& dependency_id, double& dependency_value) -> bool {
-        return evaluate_cell_numeric(workbook, dependency_id, visiting, finished, dependency_value);
+  // 开始求值此公式单元格
+  fangwen_zhong.push_back(danyuange_id);
+  FormulaEvalResult jisuan_jieguo = evaluate_formula(
+      danyuange.yuanshi,
+      [&](const string& yilai_id, double& yilai_shuzhi) -> bool {
+        return evaluate_cell_numeric(gongzuobu, yilai_id, fangwen_zhong, yiwancheng, yilai_shuzhi);
       },
-      [&](const CellRange& range, bool average, double& range_value) -> bool {
-        return evaluate_range_numeric(workbook, range, average, visiting, finished, range_value);
+      [&](const CellRange& fanwei, bool shi_pingjun, double& fanwei_shuzhi) -> bool {
+        return evaluate_range_numeric(gongzuobu, fanwei, shi_pingjun, fangwen_zhong, yiwancheng,
+                                      fanwei_shuzhi);
       });
 
-  if (!eval_result.ok || !std::isfinite(eval_result.value)) {
-    set_formula_error(cell);
-    forget_id(visiting, cell_id);
-    finished.push_back(cell_id);
+  // 求值失败
+  if (!jisuan_jieguo.chenggong || !std::isfinite(jisuan_jieguo.shuzhi)) {
+    set_formula_error(danyuange);
+    forget_id(fangwen_zhong, danyuange_id);
+    yiwancheng.push_back(danyuange_id);
     return false;
   }
 
-  cell.error.clear();
-  cell.has_numeric_value = true;
-  cell.numeric_value = eval_result.value;
-  cell.display = format_number(eval_result.value);
-  value = eval_result.value;
-  forget_id(visiting, cell_id);
-  finished.push_back(cell_id);
+  // 求值成功，保存结果
+  danyuange.cuowu.clear();
+  danyuange.you_shuzhi = true;
+  danyuange.shuzhi = jisuan_jieguo.shuzhi;
+  danyuange.xianshi = format_number(jisuan_jieguo.shuzhi);
+  shuzhi = jisuan_jieguo.shuzhi;
+  forget_id(fangwen_zhong, danyuange_id);
+  yiwancheng.push_back(danyuange_id);
   return true;
 }
 
-void refresh_all_literal_cells(Workbook& workbook) {
-  for (auto& item : workbook.mutable_cells()) {
-    refresh_literal_cell(item.second);
+// ----------------------------------------------------------------------------
+// 刷新所有字面量单元格的类型和显示
+// 在公式求值前调用，确保非公式单元格的状态正确
+// ----------------------------------------------------------------------------
+void refresh_all_literal_cells(Workbook& gongzuobu) {
+  for (auto& xiang : gongzuobu.mutable_cells()) {
+    refresh_literal_cell(xiang.second);
   }
 }
 
 }  // namespace
 
-void recalculate_all_cells(Workbook& workbook) {
-  auto start = std::chrono::steady_clock::now();
+// ----------------------------------------------------------------------------
+// 重新计算所有公式单元格
+// 流程：
+// 1. 刷新所有字面量单元格
+// 2. 遍历所有公式单元格并递归求值
+// ----------------------------------------------------------------------------
+void recalculate_all_cells(Workbook& gongzuobu) {
+  refresh_all_literal_cells(gongzuobu);
+  vector<string> fangwen_zhong;
+  vector<string> yiwancheng;
 
-  refresh_all_literal_cells(workbook);
-  vector<string> visiting;
-  vector<string> finished;
-
-  for (const auto& item : workbook.cells()) {
-    if (item.second.kind == CellKind::Formula) {
-      double numeric_value = 0.0;
-      (void)evaluate_cell_numeric(workbook, item.first, visiting, finished, numeric_value);
+  for (const auto& xiang : gongzuobu.cells()) {
+    if (xiang.second.leixing == CellKind::Formula) {
+      double shuzhi = 0.0;
+      (void)evaluate_cell_numeric(gongzuobu, xiang.first, fangwen_zhong, yiwancheng, shuzhi);
     }
   }
-
-  auto end = std::chrono::steady_clock::now();
-  double elapsed_ms =
-      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - start).count();
-  workbook.set_last_compute_ms(elapsed_ms);
 }
 
-void recalculate_impacted_cells(Workbook& workbook, const std::string& cell_id) {
-  (void)cell_id;
-  recalculate_all_cells(workbook);
+// ----------------------------------------------------------------------------
+// 增量重计算（从指定单元格开始）
+// 当前实现为全量重计算，后续可优化为只计算受影响的单元格
+// ----------------------------------------------------------------------------
+void recalculate_impacted_cells(Workbook& gongzuobu, const std::string& danyuange_id) {
+  (void)danyuange_id;
+  recalculate_all_cells(gongzuobu);
 }
 
 }  // namespace minisheet

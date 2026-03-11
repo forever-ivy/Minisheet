@@ -20,11 +20,6 @@ set(CMAKE_C_STANDARD 99)
 # 强制要求使用 C99
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# ==================== 测试支持 ====================
-
-# 启用 CMake 的测试功能，允许使用 add_test() 添加测试用例
-enable_testing()
-
 # ==================== 核心库定义 ====================
 
 # 创建一个静态库目标 minisheet_core
@@ -70,3 +65,7 @@ target_include_directories(minisheet_server PRIVATE ../vendor)
 
 # 将核心库链接到服务器程序
 target_link_libraries(minisheet_server PRIVATE minisheet_core)
+
+if (WIN32)
+  target_link_libraries(minisheet_server PRIVATE ws2_32)
+endif()

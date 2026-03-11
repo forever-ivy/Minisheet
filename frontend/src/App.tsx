@@ -10,6 +10,7 @@ import {
 import { HelpModal } from './components/HelpModal';
 import { Badge } from './components/ui/Badge';
 import { StatusBar } from './components/StatusBar';
+import { getApiBase } from './lib/desktopRuntime';
 import { GreenGlideGrid } from './spreadsheet/GreenGlideGrid';
 import {
   ActiveCell,
@@ -27,7 +28,7 @@ import {
   normalizeGridSelection,
 } from './spreadsheet/adapter';
 
-const API_BASE = 'http://127.0.0.1:8080';
+const API_BASE = getApiBase();
 const TOTAL_ROWS = 32767;
 const TOTAL_COLS = 256;
 const BROWSER_DRAFT_KEY = 'minisheet.browserDraft.v1';
@@ -35,7 +36,6 @@ const BROWSER_DRAFT_KEY = 'minisheet.browserDraft.v1';
 const emptySnapshot: WorkbookSnapshot = {
   maxRows: TOTAL_ROWS,
   maxCols: TOTAL_COLS,
-  computeMs: 0,
   cells: {},
 };
 
@@ -107,7 +107,6 @@ function normalizeSnapshot(snapshot: WorkbookSnapshot): WorkbookSnapshot {
   return {
     maxRows: snapshot.maxRows || TOTAL_ROWS,
     maxCols: snapshot.maxCols || TOTAL_COLS,
-    computeMs: snapshot.computeMs || 0,
     cells: snapshot.cells || {},
   };
 }
@@ -905,7 +904,6 @@ export default function App() {
             rangeRef={rangeRef}
             stats={selectionStats}
             nonEmptyCount={Object.keys(snapshot.cells).length}
-            computeMs={snapshot.computeMs}
           />
         </div>
       </main>

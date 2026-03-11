@@ -1,3 +1,14 @@
+/**
+ * @file m2_workbook.cpp
+ * @brief 工作簿核心类实现
+ *
+ * 本文件实现 Workbook 类，负责：
+ * - 单元格数据的存储和管理
+ * - 单元格内容的增删改查
+ * - 排序后的单元格列表获取
+ * - 触发重计算
+ */
+
 #include "minisheet/m2_workbook.h"
 
 #include "minisheet/m3_display.h"
@@ -10,95 +21,124 @@ using namespace std;
 namespace minisheet {
 namespace {
 
-string normalize_cell_id(const string& cell_id) {
-  return to_cell_id(parse_cell_id(cell_id));
+// ----------------------------------------------------------------------------
+// 将单元格ID规范化（解析后再转回，确保格式统一）
+// 例如："a1" -> "A1", "  A1  " -> "A1"
+// ----------------------------------------------------------------------------
+string normalize_cell_id(const string& danyuange_id) {
+  return to_cell_id(parse_cell_id(danyuange_id));
 }
 
 }  // namespace
 
+// ----------------------------------------------------------------------------
+// 清空工作簿，删除所有单元格数据
+// ----------------------------------------------------------------------------
 void Workbook::clear() {
-  cells_.clear();
-  last_compute_ms_ = 0.0;
+  danyuange_biao_.clear();
 }
 
-void Workbook::set_cell(const std::string& cell_id, const std::string& raw) {
-  const string normalized_id = normalize_cell_id(cell_id);
-  CellCoord coord = parse_cell_id(normalized_id);
-  (void)coord;
+// ----------------------------------------------------------------------------
+// 设置单元格内容
+// 如果 raw 为空字符串，则删除该单元格
+// 否则更新或创建单元格，并刷新其字面量显示
+// ----------------------------------------------------------------------------
+void Workbook::set_cell(const std::string& danyuange_id, const std::string& yuanshi) {
+  const string guifanhou_id = normalize_cell_id(danyuange_id);
+  CellCoord zuobiao = parse_cell_id(guifanhou_id);
+  (void)zuobiao;
 
-  if (raw.empty()) {
-    cells_.erase(normalized_id);
+  // 空内容则删除单元格
+  if (yuanshi.empty()) {
+    danyuange_biao_.erase(guifanhou_id);
     return;
   }
 
-  CellRecord& cell_record = cells_[normalized_id];
-  cell_record.id = normalized_id;
-  cell_record.raw = raw;
-  refresh_literal_cell(cell_record);
+  // 更新或创建单元格记录
+  CellRecord& danyuange_jilu = danyuange_biao_[guifanhou_id];
+  danyuange_jilu.biaoshi = guifanhou_id;
+  danyuange_jilu.yuanshi = yuanshi;
+  refresh_literal_cell(danyuange_jilu);
 }
 
-const CellRecord& Workbook::cell(const std::string& cell_id) const {
-  const string normalized_id = normalize_cell_id(cell_id);
-  auto iterator = cells_.find(normalized_id);
-  if (iterator == cells_.end()) {
-    empty_cell_ = {};
-    empty_cell_.id = normalized_id;
-    empty_cell_.kind = CellKind::Empty;
-    empty_cell_.display.clear();
-    empty_cell_.raw.clear();
-    empty_cell_.error.clear();
-    empty_cell_.has_numeric_value = false;
-    empty_cell_.numeric_value = 0.0;
-    return empty_cell_;
+// ----------------------------------------------------------------------------
+// 获取单元格记录（只读）
+// 如果单元格不存在，返回一个空的临时 CellRecord
+// ----------------------------------------------------------------------------
+const CellRecord& Workbook::cell(const std::string& danyuange_id) const {
+  const string guifanhou_id = normalize_cell_id(danyuange_id);
+  auto dieqi = danyuange_biao_.find(guifanhou_id);
+  if (dieqi == danyuange_biao_.end()) {
+    // 返回空单元格（mutable 允许在 const 方法中修改）
+    kong_danyuange_ = {};
+    kong_danyuange_.biaoshi = guifanhou_id;
+    kong_danyuange_.leixing = CellKind::Empty;
+    kong_danyuange_.xianshi.clear();
+    kong_danyuange_.yuanshi.clear();
+    kong_danyuange_.cuowu.clear();
+    kong_danyuange_.you_shuzhi = false;
+    kong_danyuange_.shuzhi = 0.0;
+    return kong_danyuange_;
   }
-  return iterator->second;
+  return dieqi->second;
 }
 
-bool Workbook::has_cell(const std::string& cell_id) const {
-  const string normalized_id = normalize_cell_id(cell_id);
-  return cells_.find(normalized_id) != cells_.end();
+// ----------------------------------------------------------------------------
+// 检查指定单元格是否存在
+// ----------------------------------------------------------------------------
+bool Workbook::has_cell(const std::string& danyuange_id) const {
+  const string guifanhou_id = normalize_cell_id(danyuange_id);
+  return danyuange_biao_.find(guifanhou_id) != danyuange_biao_.end();
 }
 
+// ----------------------------------------------------------------------------
+// 获取按行列排序的所有单元格ID列表
+// 排序规则：先按行号升序，同行再按列号升序
+// ----------------------------------------------------------------------------
 vector<string> Workbook::ordered_cell_ids() const {
-  vector<string> ids;
-  ids.reserve(cells_.size());
-  for (const auto& item : cells_) {
-    ids.push_back(item.first);
+  vector<string> id_men;
+  id_men.reserve(danyuange_biao_.size());
+  for (const auto& xiang : danyuange_biao_) {
+    id_men.push_back(xiang.first);
   }
 
-  sort(ids.begin(), ids.end(), [](const string& left, const string& right) {
-    CellCoord lhs = parse_cell_id(left);
-    CellCoord rhs = parse_cell_id(right);
-    if (lhs.row != rhs.row) {
-      return lhs.row < rhs.row;
+  sort(id_men.begin(), id_men.end(), [](const string& zuo_id, const string& you_id) {
+    CellCoord zuo_zuobiao = parse_cell_id(zuo_id);
+    CellCoord you_zuobiao = parse_cell_id(you_id);
+    if (zuo_zuobiao.hang != you_zuobiao.hang) {
+      return zuo_zuobiao.hang < you_zuobiao.hang;
     }
-    return lhs.column < rhs.column;
+    return zuo_zuobiao.lie < you_zuobiao.lie;
   });
-  return ids;
+  return id_men;
 }
 
+// ----------------------------------------------------------------------------
+// 获取所有单元格的只读引用
+// ----------------------------------------------------------------------------
 const std::unordered_map<std::string, CellRecord>& Workbook::cells() const {
-  return cells_;
+  return danyuange_biao_;
 }
 
+// ----------------------------------------------------------------------------
+// 获取所有单元格的可写引用（供内部重计算使用）
+// ----------------------------------------------------------------------------
 std::unordered_map<std::string, CellRecord>& Workbook::mutable_cells() {
-  return cells_;
+  return danyuange_biao_;
 }
 
+// ----------------------------------------------------------------------------
+// 重新计算所有公式单元格
+// ----------------------------------------------------------------------------
 void Workbook::recalculate_all() {
   recalculate_all_cells(*this);
 }
 
-void Workbook::recalculate_from(const std::string& cell_id) {
-  recalculate_impacted_cells(*this, cell_id);
-}
-
-double Workbook::last_compute_ms() const {
-  return last_compute_ms_;
-}
-
-void Workbook::set_last_compute_ms(double value) {
-  last_compute_ms_ = value;
+// ----------------------------------------------------------------------------
+// 从指定单元格开始重新计算（目前实现为全量重算）
+// ----------------------------------------------------------------------------
+void Workbook::recalculate_from(const std::string& danyuange_id) {
+  recalculate_impacted_cells(*this, danyuange_id);
 }
 
 }  // namespace minisheet

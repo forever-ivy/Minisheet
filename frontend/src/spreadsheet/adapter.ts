@@ -18,7 +18,6 @@ export type CellDto = {
 export type WorkbookSnapshot = {
   maxRows: number;
   maxCols: number;
-  computeMs: number;
   cells: Record<string, CellDto>;
 };
 
