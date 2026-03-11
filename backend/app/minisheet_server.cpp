@@ -62,6 +62,28 @@ int main() {
     }
   });
 
+  server.Post("/api/restore-browser-draft", [&](const httplib::Request& request, httplib::Response& response) {
+    try {
+      nlohmann::json body = nlohmann::json::parse(request.body);
+      std::unordered_map<std::string, std::string> cells;
+
+      if (body.contains("cells") && body.at("cells").is_object()) {
+        for (auto it = body.at("cells").begin(); it != body.at("cells").end(); ++it) {
+          if (!it.value().is_string()) {
+            throw std::runtime_error("draft cells must be strings");
+          }
+          cells[it.key()] = it.value().get<std::string>();
+        }
+      }
+
+      minisheet::restore_workbook_from_browser_draft(workbook, cells);
+      response.set_content(minisheet::workbook_snapshot_json(workbook), "application/json");
+    } catch (const std::exception& error) {
+      response.status = 400;
+      response.set_content(nlohmann::json({{"error", error.what()}}).dump(), "application/json");
+    }
+  });
+
   server.Post("/api/load-dat", [&](const httplib::Request& request, httplib::Response& response) {
     try {
       if (!request.form.has_file("dat")) {

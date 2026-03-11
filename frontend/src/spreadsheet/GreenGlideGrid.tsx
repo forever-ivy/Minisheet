@@ -28,6 +28,8 @@ type GreenGlideGridProps = {
   onSelectionChange: (selection: GridSelection, activeCell: ActiveCell | null) => void;
   onSelectionFinish?: () => void;
   onCellCommit: (cellId: string, raw: string) => Promise<void> | void;
+  onDeleteSelection?: (selection: GridSelection) => Promise<void> | void;
+  onSelectAll?: () => Promise<void> | void;
 };
 
 const gridTheme = {
@@ -99,6 +101,8 @@ export function GreenGlideGrid({
   onSelectionChange,
   onSelectionFinish,
   onCellCommit,
+  onDeleteSelection,
+  onSelectAll,
 }: GreenGlideGridProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [containerSize, setContainerSize] = useState(() => ({ width: 900, height: 560 }));
@@ -168,12 +172,52 @@ export function GreenGlideGrid({
     [onCellCommit],
   );
 
+  const handleDelete = useCallback(
+    (nextSelection: typeof glideSelection) => {
+      const nextGridSelection = glideSelectionToGridSelection(nextSelection);
+      void onDeleteSelection?.(nextGridSelection);
+      return true;
+    },
+    [onDeleteSelection],
+  );
+
+  const handleGridKeyDown = useCallback(
+    (event: {
+      key: string;
+      ctrlKey: boolean;
+      metaKey: boolean;
+      cancel: () => void;
+      stopPropagation: () => void;
+      preventDefault: () => void;
+    }) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+        event.cancel();
+        event.stopPropagation();
+        event.preventDefault();
+        void onSelectAll?.();
+        return;
+      }
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.cancel();
+        event.stopPropagation();
+        event.preventDefault();
+        void onDeleteSelection?.(selection);
+      }
+    },
+    [onDeleteSelection, onSelectAll, selection],
+  );
+
+  const handlePointerDownCapture = useCallback(() => {
+    onGridPointerDown?.();
+  }, [onGridPointerDown]);
+
   return (
     <div
       ref={containerRef}
       className="green-glide-shell"
       data-testid="green-glide-shell"
-      onPointerDownCapture={onGridPointerDown}
+      onPointerDownCapture={handlePointerDownCapture}
       onPointerUpCapture={onSelectionFinish}
     >
       <DataEditor
@@ -190,6 +234,10 @@ export function GreenGlideGrid({
         gridSelection={glideSelection}
         onGridSelectionChange={handleGridSelectionChange}
         onCellEdited={handleCellEdited}
+        onDelete={handleDelete}
+        onKeyDown={handleGridKeyDown}
+        editOnType
+        cellActivationBehavior="second-click"
         rangeSelect="rect"
         columnSelect="none"
         rowSelect="none"

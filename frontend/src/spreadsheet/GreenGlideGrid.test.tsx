@@ -93,7 +93,7 @@ test('passes Glide grid config and bridges selection/edit hooks', async () => {
   expect(captured.props?.rangeSelect).toBe('rect');
   expect(captured.props?.rowSelect).toBe('none');
   expect(captured.props?.columnSelect).toBe('none');
-  expect(captured.props?.cellActivationBehavior).toBe('single-click');
+  expect(captured.props?.cellActivationBehavior).toBe('second-click');
   expect(captured.props?.editOnType).toBe(true);
   expect(captured.props?.getCellsForSelection).toBe(true);
   expect(typeof captured.props?.height).toBe('number');
@@ -159,4 +159,115 @@ test('keeps numeric display text when glide returns a number edit without parsed
   });
 
   expect(onCellCommit).toHaveBeenCalledWith('A1', '123');
+});
+
+test('bridges Glide delete requests back to the app', async () => {
+  const onSelectionChange = jest.fn();
+  const onSelectionFinish = jest.fn();
+  const onCellCommit = jest.fn();
+  const onDeleteSelection = jest.fn();
+
+  render(
+    <GreenGlideGrid
+      snapshot={snapshot}
+      activeCell={{ row: 1, col: 1, cellId: 'B2' }}
+      selection={{ startRow: 1, startCol: 1, endRow: 2, endCol: 2 }}
+      onSelectionChange={onSelectionChange}
+      onSelectionFinish={onSelectionFinish}
+      onCellCommit={onCellCommit}
+      onDeleteSelection={onDeleteSelection}
+    />,
+  );
+
+  const handled = (captured.props?.onDelete as (selection: unknown) => boolean)?.({
+    current: {
+      cell: [1, 1],
+      range: { x: 1, y: 1, width: 2, height: 2 },
+      rangeStack: [],
+    },
+    columns: { items: [] },
+    rows: { items: [] },
+  });
+
+  expect(handled).toBe(true);
+  expect(onDeleteSelection).toHaveBeenCalledWith({ startRow: 1, startCol: 1, endRow: 2, endCol: 2 });
+});
+
+test('bridges Glide keyboard shortcuts for delete and select-all', async () => {
+  const onSelectionChange = jest.fn();
+  const onSelectionFinish = jest.fn();
+  const onCellCommit = jest.fn();
+  const onDeleteSelection = jest.fn();
+  const onSelectAll = jest.fn();
+
+  render(
+    <GreenGlideGrid
+      snapshot={snapshot}
+      activeCell={{ row: 1, col: 1, cellId: 'B2' }}
+      selection={{ startRow: 1, startCol: 1, endRow: 2, endCol: 2 }}
+      onSelectionChange={onSelectionChange}
+      onSelectionFinish={onSelectionFinish}
+      onCellCommit={onCellCommit}
+      onDeleteSelection={onDeleteSelection}
+      onSelectAll={onSelectAll}
+    />,
+  );
+
+  const cancel = jest.fn();
+  const stopPropagation = jest.fn();
+  const preventDefault = jest.fn();
+
+  (captured.props?.onKeyDown as (event: unknown) => void)({
+    key: 'Delete',
+    ctrlKey: false,
+    metaKey: false,
+    cancel,
+    stopPropagation,
+    preventDefault,
+  });
+
+  expect(onDeleteSelection).toHaveBeenCalledWith({ startRow: 1, startCol: 1, endRow: 2, endCol: 2 });
+  expect(cancel).toHaveBeenCalledTimes(1);
+
+  (captured.props?.onKeyDown as (event: unknown) => void)({
+    key: 'a',
+    ctrlKey: true,
+    metaKey: false,
+    cancel,
+    stopPropagation,
+    preventDefault,
+  });
+
+  expect(onSelectAll).toHaveBeenCalledTimes(1);
+});
+
+test('does not steal focus to the outer shell on pointer down', async () => {
+  const onSelectionChange = jest.fn();
+  const onSelectionFinish = jest.fn();
+  const onCellCommit = jest.fn();
+  const onGridPointerDown = jest.fn();
+
+  render(
+    <div>
+      <input aria-label="outside-input" />
+      <GreenGlideGrid
+        snapshot={snapshot}
+        activeCell={{ row: 0, col: 0, cellId: 'A1' }}
+        selection={{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }}
+        onGridPointerDown={onGridPointerDown}
+        onSelectionChange={onSelectionChange}
+        onSelectionFinish={onSelectionFinish}
+        onCellCommit={onCellCommit}
+      />
+    </div>,
+  );
+
+  const outsideInput = screen.getByRole('textbox', { name: 'outside-input' });
+  outsideInput.focus();
+  expect(document.activeElement).toBe(outsideInput);
+
+  fireEvent.pointerDown(screen.getByTestId('green-glide-shell'));
+
+  expect(onGridPointerDown).toHaveBeenCalledTimes(1);
+  expect(document.activeElement).not.toBe(screen.getByTestId('green-glide-shell'));
 });

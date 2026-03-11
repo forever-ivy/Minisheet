@@ -2,16 +2,13 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useSta
 import {
   Check,
   Download,
-  FolderOpen,
   FunctionSquare,
-  RefreshCw,
-  Search,
   Sigma,
-  SunMedium,
   Upload,
 } from 'lucide-react';
 
 import { HelpModal } from './components/HelpModal';
+import { Badge } from './components/ui/Badge';
 import { StatusBar } from './components/StatusBar';
 import { GreenGlideGrid } from './spreadsheet/GreenGlideGrid';
 import {
@@ -33,6 +30,7 @@ import {
 const API_BASE = 'http://127.0.0.1:8080';
 const TOTAL_ROWS = 32767;
 const TOTAL_COLS = 256;
+const BROWSER_DRAFT_KEY = 'minisheet.browserDraft.v1';
 
 const emptySnapshot: WorkbookSnapshot = {
   maxRows: TOTAL_ROWS,
@@ -41,10 +39,57 @@ const emptySnapshot: WorkbookSnapshot = {
   cells: {},
 };
 
+type BrowserDraft = {
+  workbookTitle: string;
+  cells: Record<string, string>;
+  savedAt: string;
+};
+
+function buildSingleCellSelection(cell: ActiveCell): GridSelection {
+  return {
+    startRow: cell.row,
+    startCol: cell.col,
+    endRow: cell.row,
+    endCol: cell.col,
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function buildSheetSelection(maxRows: number, maxCols: number): GridSelection {
+  return {
+    startRow: 0,
+    startCol: 0,
+    endRow: Math.max(0, maxRows - 1),
+    endCol: Math.max(0, maxCols - 1),
+  };
+}
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.closest('#portal')) {
+    return true;
+  }
+
+  const tagName = target.tagName;
+  return (
+    tagName === 'INPUT' ||
+    tagName === 'TEXTAREA' ||
+    tagName === 'SELECT' ||
+    tagName === 'BUTTON' ||
+    tagName === 'A' ||
+    target.isContentEditable
+  );
+}
+
 const tabLabels: Array<{ value: ToolbarTab; label: string }> = [
   { value: 'home', label: '主页' },
   { value: 'insert', label: '插入' },
-  { value: 'data', label: '数据' },
 ];
 
 const formulaButtons: Array<{
@@ -92,6 +137,89 @@ function downloadBlob(blob: Blob, name: string) {
   window.URL.revokeObjectURL(url);
 }
 
+function escapeCsvField(value: string) {
+  if (/[",\n\r]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+
+  return value;
+}
+
+function buildCsvFromSnapshot(snapshot: WorkbookSnapshot) {
+  const cells = Object.values(snapshot.cells);
+  if (cells.length === 0) {
+    return '';
+  }
+
+  let maxRow = 0;
+  let maxCol = 0;
+  for (const cell of cells) {
+    const coords = cellIdToGridCoords(cell.id);
+    maxRow = Math.max(maxRow, coords.row);
+    maxCol = Math.max(maxCol, coords.col);
+  }
+
+  const rows: string[] = [];
+  for (let row = 0; row <= maxRow; row += 1) {
+    const values: string[] = [];
+    for (let col = 0; col <= maxCol; col += 1) {
+      const cellId = gridCoordsToCellId(row, col);
+      values.push(escapeCsvField(snapshot.cells[cellId]?.raw ?? ''));
+    }
+    rows.push(values.join(','));
+  }
+
+  return rows.join('\n');
+}
+
+function buildBrowserDraft(snapshot: WorkbookSnapshot, workbookTitle: string): BrowserDraft {
+  const cells = Object.values(snapshot.cells).reduce<Record<string, string>>((accumulator, cell) => {
+    if (cell.raw !== '') {
+      accumulator[cell.id] = cell.raw;
+    }
+    return accumulator;
+  }, {});
+
+  return {
+    workbookTitle,
+    cells,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function parseBrowserDraft(raw: string | null): BrowserDraft | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<BrowserDraft>;
+    if (typeof parsed.workbookTitle !== 'string' || typeof parsed.savedAt !== 'string') {
+      return null;
+    }
+
+    if (!parsed.cells || typeof parsed.cells !== 'object' || Array.isArray(parsed.cells)) {
+      return null;
+    }
+
+    const cells = Object.entries(parsed.cells).reduce<Record<string, string>>((accumulator, [cellId, value]) => {
+      if (typeof value !== 'string') {
+        throw new Error('invalid draft cell value');
+      }
+      accumulator[cellId] = value;
+      return accumulator;
+    }, {});
+
+    return {
+      workbookTitle: parsed.workbookTitle,
+      cells,
+      savedAt: parsed.savedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [snapshot, setSnapshot] = useState<WorkbookSnapshot>(emptySnapshot);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(cellIdToGridCoords('A1'));
@@ -105,10 +233,8 @@ export default function App() {
   const [formulaDraft, setFormulaDraft] = useState('');
   const [formulaMode, setFormulaMode] = useState<FormulaMode>('idle');
   const [backendOnline, setBackendOnline] = useState(false);
-  const [statusText, setStatusText] = useState('正在连接服务');
   const [workbookTitle, setWorkbookTitle] = useState('未命名');
   const [activeTab, setActiveTab] = useState<ToolbarTab>('home');
-  const [searchQuery, setSearchQuery] = useState('');
   const [pendingFormulaAction, setPendingFormulaAction] = useState<ToolbarFormulaAction | null>(null);
   const [pendingTargetCellId, setPendingTargetCellId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -119,6 +245,42 @@ export default function App() {
   const hasLoadedRef = useRef(false);
   const formulaSelectionArmedRef = useRef(false);
   const gridSelectionRef = useRef<GridSelection>(gridSelection);
+  // 选中单元格的“即时来源”，用于抵抗异步回包/批量事件导致的状态回退。
+  const currentCellIdRef = useRef('A1');
+
+  const retargetCellState = useCallback((
+    nextActiveCell: ActiveCell,
+    options?: {
+      selection?: GridSelection;
+      snapshotOverride?: WorkbookSnapshot;
+      clearPending?: boolean;
+      formulaMode?: FormulaMode;
+    },
+  ) => {
+    const nextSelection = options?.selection ?? buildSingleCellSelection(nextActiveCell);
+    const nextSnapshot = options?.snapshotOverride ?? snapshot;
+
+    currentCellIdRef.current = nextActiveCell.cellId;
+    setActiveCell(nextActiveCell);
+    gridSelectionRef.current = nextSelection;
+    setGridSelection(nextSelection);
+    setFormulaTargetCellId(nextActiveCell.cellId);
+    setFormulaDraft(nextSnapshot.cells[nextActiveCell.cellId]?.raw ?? '');
+    setFormulaMode(options?.formulaMode ?? 'idle');
+
+    if (options?.clearPending ?? true) {
+      setPendingFormulaAction(null);
+      setPendingTargetCellId(null);
+    }
+  }, [snapshot]);
+
+  const selectAllCells = useCallback(() => {
+    const nextSelection = buildSheetSelection(snapshot.maxRows, snapshot.maxCols);
+    formulaSelectionArmedRef.current = false;
+    gridSelectionRef.current = nextSelection;
+    setGridSelection(nextSelection);
+    setFormulaMode('idle');
+  }, [snapshot.maxCols, snapshot.maxRows]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -164,9 +326,100 @@ export default function App() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [pendingFormulaAction]);
 
+  useEffect(() => {
+    const handleGridShortcuts = (event: KeyboardEvent) => {
+      if (isTextEntryTarget(event.target)) {
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        selectAllCells();
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', handleGridShortcuts);
+    return () => document.removeEventListener('keydown', handleGridShortcuts);
+  }, [selectAllCells]);
+
+  useEffect(() => {
+    const handleNavigationKeyDown = (event: KeyboardEvent) => {
+      const isNumpadDigitMove =
+        (event.code === 'Numpad8' && event.key === '8') ||
+        (event.code === 'Numpad2' && event.key === '2') ||
+        (event.code === 'Numpad4' && event.key === '4') ||
+        (event.code === 'Numpad6' && event.key === '6');
+
+      if (
+        (event.defaultPrevented && !isNumpadDigitMove) ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        isTextEntryTarget(event.target)
+      ) {
+        return;
+      }
+
+      const key = event.key;
+      let rowDelta = 0;
+      let colDelta = 0;
+
+      if (isNumpadDigitMove) {
+        if (event.code === 'Numpad8') {
+          rowDelta = -1;
+        } else if (event.code === 'Numpad2') {
+          rowDelta = 1;
+        } else if (event.code === 'Numpad4') {
+          colDelta = -1;
+        } else {
+          colDelta = 1;
+        }
+      } else if (key === 'ArrowUp') {
+        rowDelta = -1;
+      } else if (key === 'ArrowDown' || key === 'Enter') {
+        rowDelta = 1;
+      } else if (key === 'ArrowLeft') {
+        colDelta = -1;
+      } else if (key === 'ArrowRight' || key === 'Tab') {
+        colDelta = event.shiftKey ? -1 : 1;
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+
+      const baseCell = activeCell ?? cellIdToGridCoords(formulaTargetCellId || 'A1');
+      const nextRow = clamp(baseCell.row + rowDelta, 0, Math.max(0, snapshot.maxRows - 1));
+      const nextCol = clamp(baseCell.col + colDelta, 0, Math.max(0, snapshot.maxCols - 1));
+      const nextActiveCell = {
+        row: nextRow,
+        col: nextCol,
+        cellId: gridCoordsToCellId(nextRow, nextCol),
+      };
+
+      if (formulaSelectionArmedRef.current && formulaMode !== 'idle' && formulaDraft.trim().startsWith('=')) {
+        const nextSelection = buildSingleCellSelection(nextActiveCell);
+        setActiveCell(nextActiveCell);
+        gridSelectionRef.current = nextSelection;
+        setGridSelection(nextSelection);
+        setFormulaDraft((current) => applySelectionToFormula(current, nextSelection));
+        setFormulaMode('range-selecting');
+        return;
+      }
+
+      formulaSelectionArmedRef.current = false;
+      retargetCellState(nextActiveCell, { clearPending: true });
+    };
+
+    document.addEventListener('keydown', handleNavigationKeyDown);
+    return () => document.removeEventListener('keydown', handleNavigationKeyDown);
+  }, [activeCell, formulaDraft, formulaMode, formulaTargetCellId, retargetCellState, snapshot.maxCols, snapshot.maxRows]);
+
   const syncSnapshot = useCallback((nextSnapshot: WorkbookSnapshot, preferredCellId?: string) => {
     const normalized = normalizeSnapshot(nextSnapshot);
-    const nextCellId = preferredCellId ?? formulaTargetCellId ?? activeCell?.cellId ?? 'A1';
+    const currentCellId = currentCellIdRef.current || activeCell?.cellId || formulaTargetCellId || 'A1';
+    const nextCellId = preferredCellId && preferredCellId === currentCellId ? preferredCellId : currentCellId;
     const nextCoords = cellIdToGridCoords(nextCellId);
     const nextRaw = normalized.cells[nextCellId]?.raw ?? '';
 
@@ -174,20 +427,15 @@ export default function App() {
     setPendingFormulaAction(null);
     setPendingTargetCellId(null);
     setSnapshot(normalized);
+    currentCellIdRef.current = nextCoords.cellId;
     setActiveCell(nextCoords);
-    const nextSelection = {
-      startRow: nextCoords.row,
-      startCol: nextCoords.col,
-      endRow: nextCoords.row,
-      endCol: nextCoords.col,
-    };
+    const nextSelection = buildSingleCellSelection(nextCoords);
     gridSelectionRef.current = nextSelection;
     setGridSelection(nextSelection);
     setFormulaTargetCellId(nextCellId);
     setFormulaDraft(nextRaw);
     setFormulaMode('idle');
     setBackendOnline(true);
-    setStatusText('已自动保存');
   }, [activeCell?.cellId, formulaTargetCellId]);
 
   const loadSnapshot = useCallback(async () => {
@@ -196,11 +444,42 @@ export default function App() {
       syncSnapshot(nextSnapshot, formulaTargetCellId || 'A1');
     } catch (error) {
       setBackendOnline(false);
-      setStatusText('服务离线');
       setFormulaMode('idle');
       console.error(error);
     }
   }, [formulaTargetCellId, syncSnapshot]);
+
+  const restoreBrowserDraft = useCallback(async (draft: BrowserDraft) => {
+    const nextSnapshot = await fetchJson<WorkbookSnapshot>(`${API_BASE}/api/restore-browser-draft`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        workbookTitle: draft.workbookTitle,
+        cells: draft.cells,
+      }),
+    });
+    setWorkbookTitle(draft.workbookTitle || '未命名');
+    syncSnapshot(nextSnapshot, 'A1');
+  }, [syncSnapshot]);
+
+  const loadInitialWorkbook = useCallback(async () => {
+    const draft = parseBrowserDraft(window.sessionStorage.getItem(BROWSER_DRAFT_KEY));
+    if (!draft) {
+      window.sessionStorage.removeItem(BROWSER_DRAFT_KEY);
+      await loadSnapshot();
+      return;
+    }
+
+    try {
+      await restoreBrowserDraft(draft);
+    } catch (error) {
+      window.sessionStorage.removeItem(BROWSER_DRAFT_KEY);
+      console.error(error);
+      await loadSnapshot();
+    }
+  }, [loadSnapshot, restoreBrowserDraft]);
 
   useEffect(() => {
     if (hasLoadedRef.current) {
@@ -208,10 +487,10 @@ export default function App() {
     }
 
     hasLoadedRef.current = true;
-    void loadSnapshot();
-  }, [loadSnapshot]);
+    void loadInitialWorkbook();
+  }, [loadInitialWorkbook]);
 
-  async function commitCell(cellId: string, raw: string) {
+  const commitCell = useCallback(async (cellId: string, raw: string) => {
     try {
       const nextSnapshot = await fetchJson<WorkbookSnapshot>(`${API_BASE}/api/cell`, {
         method: 'POST',
@@ -223,12 +502,76 @@ export default function App() {
       syncSnapshot(nextSnapshot, cellId);
     } catch (error) {
       setBackendOnline(false);
-      setStatusText('服务离线');
       console.error(error);
     }
-  }
+  }, [syncSnapshot]);
+
+  const clearSelection = useCallback(async (selectionToClear?: GridSelection) => {
+    const normalized = normalizeGridSelection(selectionToClear ?? gridSelectionRef.current);
+    const selectedCells = normalized
+      ? Object.values(snapshot.cells)
+          .filter((cell) => {
+            const coords = cellIdToGridCoords(cell.id);
+            return (
+              coords.row >= normalized.startRow &&
+              coords.row <= normalized.endRow &&
+              coords.col >= normalized.startCol &&
+              coords.col <= normalized.endCol
+            );
+          })
+          .map((cell) => cell.id)
+      : [];
+
+    if (selectedCells.length === 0) {
+      const fallbackCellId = currentCellIdRef.current || activeCell?.cellId;
+      if (!fallbackCellId) {
+        return;
+      }
+      await commitCell(fallbackCellId, '');
+      return;
+    }
+
+    try {
+      let lastSnapshot: WorkbookSnapshot | null = null;
+      for (const cellId of selectedCells) {
+        lastSnapshot = await fetchJson<WorkbookSnapshot>(`${API_BASE}/api/cell`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ cellId, raw: '' }),
+        });
+      }
+
+      if (lastSnapshot) {
+        syncSnapshot(lastSnapshot);
+      }
+    } catch (error) {
+      setBackendOnline(false);
+      console.error(error);
+    }
+  }, [activeCell?.cellId, commitCell, snapshot.cells, syncSnapshot]);
+
+  useEffect(() => {
+    const handleDeleteShortcut = (event: KeyboardEvent) => {
+      if (isTextEntryTarget(event.target) || event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+
+      if (event.key !== 'Delete' && event.key !== 'Backspace') {
+        return;
+      }
+
+      event.preventDefault();
+      void clearSelection();
+    };
+
+    document.addEventListener('keydown', handleDeleteShortcut);
+    return () => document.removeEventListener('keydown', handleDeleteShortcut);
+  }, [clearSelection]);
 
   function handleGridPointerDown() {
+    formulaInputRef.current?.blur();
     formulaSelectionArmedRef.current = formulaMode !== 'idle' && formulaDraft.trim().startsWith('=');
   }
 
@@ -239,6 +582,7 @@ export default function App() {
       return;
     }
 
+    currentCellIdRef.current = nextActiveCell.cellId;
     setActiveCell(nextActiveCell);
 
     if (formulaSelectionArmedRef.current && formulaMode !== 'idle' && formulaDraft.trim().startsWith('=')) {
@@ -248,12 +592,14 @@ export default function App() {
     }
 
     if (formulaMode !== 'idle') {
+      if (!formulaDraft.trim().startsWith('=')) {
+        formulaSelectionArmedRef.current = false;
+        retargetCellState(nextActiveCell, { selection, clearPending: true });
+      }
       return;
     }
 
-    const nextCellId = nextActiveCell.cellId;
-    setFormulaTargetCellId(nextCellId);
-    setFormulaDraft(snapshot.cells[nextCellId]?.raw ?? '');
+    retargetCellState(nextActiveCell, { selection, clearPending: false });
   }
 
   function handleSelectionFinish() {
@@ -329,7 +675,6 @@ export default function App() {
       syncSnapshot(nextSnapshot, 'A1');
     } catch (error) {
       setBackendOnline(false);
-      setStatusText('服务离线');
       console.error(error);
     }
   }
@@ -350,27 +695,35 @@ export default function App() {
     event.target.value = '';
   }
 
-  async function handleSaveDat() {
+  function handleExportCsv() {
+    const csvContent = buildCsvFromSnapshot(snapshot);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+    downloadBlob(blob, `${workbookTitle || 'workbook'}.csv`);
+  }
+
+  async function handleExportDat() {
     try {
       const blob = await fetchBlob(`${API_BASE}/api/save-dat`, {
         method: 'POST',
       });
       downloadBlob(blob, `${workbookTitle || 'workbook'}.dat`);
       setBackendOnline(true);
-      setStatusText('已自动保存');
     } catch (error) {
       setBackendOnline(false);
-      setStatusText('服务离线');
       console.error(error);
     }
   }
+
+  const handleSaveToBrowser = useCallback(() => {
+    const draft = buildBrowserDraft(snapshot, workbookTitle || '未命名');
+    window.sessionStorage.setItem(BROWSER_DRAFT_KEY, JSON.stringify(draft));
+  }, [snapshot, workbookTitle]);
 
   const toolbarActions = useMemo(
     () => ({
       home: [
         { key: 'import-csv', label: '导入 CSV', icon: Upload, onClick: () => csvInputRef.current?.click() },
-        { key: 'load-dat', label: '载入 DAT', icon: FolderOpen, onClick: () => datInputRef.current?.click() },
-        { key: 'refresh', label: '刷新', icon: RefreshCw, onClick: () => void loadSnapshot() },
+        { key: 'save', label: '保存', icon: Check, onClick: handleSaveToBrowser },
       ],
       insert: formulaButtons.map(({ kind, label, icon }) => ({
         key: kind,
@@ -378,23 +731,14 @@ export default function App() {
         icon,
         onClick: () => handleFormulaToolbar(kind),
       })),
-      data: [
-        { key: 'reload', label: '重新同步', icon: RefreshCw, onClick: () => void loadSnapshot() },
-      ],
     }),
-    [loadSnapshot, handleFormulaToolbar],
+    [handleFormulaToolbar, handleSaveToBrowser],
   );
 
   const visibleActions = useMemo(() => {
-    const query = searchQuery.trim();
     const currentActions = toolbarActions[activeTab];
-
-    if (!query) {
-      return currentActions;
-    }
-
-    return currentActions.filter((action) => action.label.includes(query));
-  }, [activeTab, searchQuery, toolbarActions]);
+    return currentActions;
+  }, [activeTab, toolbarActions]);
 
   const selectionStats = useMemo(
     () => buildSelectionStats(snapshot, gridSelection, activeCell),
@@ -446,20 +790,19 @@ export default function App() {
       <header className="app-header">
         <div className="brand">
           <div className="brand-icon" />
-          <span>s.Sheet</span>
+          <span>MiniSheet</span>
         </div>
 
         <div className="header-meta">
-          <div className={`weather-widget ${backendOnline ? '' : 'is-offline'}`}>
-            <SunMedium className="icon" />
-            {statusText}
-          </div>
           <div className="user-actions">
-            <button type="button" className="help-link" onClick={() => setHelpOpen(true)}>
-              帮助
+            <button type="button" className="badge-action" onClick={() => setHelpOpen(true)}>
+              <Badge variant="secondary">帮助</Badge>
             </button>
-            <button className="icon-btn" type="button" aria-label="刷新快照" onClick={() => void loadSnapshot()}>
-              <RefreshCw className="icon" />
+            <button type="button" className="badge-action" onClick={() => datInputRef.current?.click()}>
+              <Badge variant="secondary">载入 DAT</Badge>
+            </button>
+            <button type="button" className="badge-action" onClick={() => void handleExportDat()}>
+              <Badge variant="secondary">导出 DAT</Badge>
             </button>
           </div>
         </div>
@@ -481,16 +824,6 @@ export default function App() {
               ))}
             </div>
 
-            <label className="search-pill" aria-label="搜索命令">
-              <Search className="icon" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="搜索命令..."
-              />
-            </label>
-
             <div className="action-pills" aria-label={`${activeTab} 工具区`}>
               {visibleActions.map(({ key, label, icon: Icon, onClick }) => (
                 <button key={key} type="button" className="pill-btn" onClick={onClick}>
@@ -500,9 +833,9 @@ export default function App() {
               ))}
             </div>
 
-            <button className="pill-btn primary" type="button" onClick={handleSaveDat}>
+            <button className="pill-btn primary" type="button" onClick={handleExportCsv}>
               <Download className="icon icon-small" />
-              导出 DAT
+              导出 CSV
             </button>
           </div>
 
@@ -538,6 +871,8 @@ export default function App() {
                 onSelectionChange={handleSelectionChange}
                 onSelectionFinish={handleSelectionFinish}
                 onCellCommit={commitCell}
+                onDeleteSelection={clearSelection}
+                onSelectAll={selectAllCells}
               />
             </div>
           </div>
@@ -545,6 +880,7 @@ export default function App() {
           <StatusBar
             status={statusLabel}
             workbookTitle={workbookTitle}
+            onWorkbookTitleChange={setWorkbookTitle}
             rangeRef={rangeRef}
             stats={selectionStats}
             nonEmptyCount={Object.keys(snapshot.cells).length}

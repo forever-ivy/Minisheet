@@ -3,7 +3,6 @@ import {
   GridCellKind,
   type GridSelection as GlideGridSelection,
   type GridCell,
-  type NumberCell,
   type Rectangle,
   type TextCell,
 } from '@glideapps/glide-data-grid';
@@ -38,7 +37,7 @@ export type ActiveCell = {
 
 export type FormulaMode = 'idle' | 'editing' | 'range-selecting';
 export type ToolbarFormulaAction = 'sum' | 'avg' | 'sqrt' | 'abs';
-export type ToolbarTab = 'home' | 'insert' | 'data';
+export type ToolbarTab = 'home' | 'insert';
 
 export type InsightMetric = {
   values: number[];
@@ -274,17 +273,17 @@ export function buildGlideCell(cell: CellDto | undefined, row: number, col: numb
     return formulaCell;
   }
 
-  if ((cell.type === 'integer' || cell.type === 'float') && numericValue != null) {
-    const numberCell: NumberCell = {
-      kind: GridCellKind.Number,
+  // 数值格也使用 Text 单元格渲染，避免不同 locale 下 Number 编辑器解析出 NaN 导致“无法输入数字”。
+  if (cell.type === 'integer' || cell.type === 'float') {
+    const numericCell: TextCell = {
+      kind: GridCellKind.Text,
       allowOverlay: true,
-      data: numericValue,
+      data: cell.raw,
       displayData: cell.display,
       copyData: cell.display,
       contentAlign: 'right',
-      thousandSeparator: true,
     };
-    return numberCell;
+    return numericCell;
   }
 
   const textCell: TextCell = {

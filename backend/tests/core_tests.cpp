@@ -1,6 +1,7 @@
 #include "minisheet/m1_types.h"
 #include "minisheet/m2_workbook.h"
 #include "minisheet/m6_storage.h"
+#include "minisheet/m7_api.h"
 
 #include <cmath>
 #include <filesystem>
@@ -49,6 +50,9 @@ int main() {
   workbook.set_cell("B3", "=A1+A2");
   workbook.set_cell("B4", "=sum(A1:B3)");
   workbook.set_cell("B5", "=avg(A1:A2)");
+  workbook.set_cell("B6", "=SUM(A1:B3)");
+  workbook.set_cell("B7", "=AVG(A1:A2)");
+  workbook.set_cell("B8", "=SQRT(9)+ABS(-2)");
   workbook.recalculate_all();
 
   expect_true(workbook.cell("A1").kind == CellKind::Integer, "A1 should be integer");
@@ -59,6 +63,9 @@ int main() {
   expect_equal(workbook.cell("B3").display, "15.5", "B3 should be 15.5");
   expect_equal(workbook.cell("B4").display, "43", "B4 should be 43");
   expect_equal(workbook.cell("B5").display, "7.75", "B5 should be 7.75");
+  expect_equal(workbook.cell("B6").display, "43", "B6 should accept uppercase SUM");
+  expect_equal(workbook.cell("B7").display, "7.75", "B7 should accept uppercase AVG");
+  expect_equal(workbook.cell("B8").display, "5", "B8 should accept uppercase SQRT/ABS");
 
   workbook.set_cell("C1", "=A3+1");
   workbook.set_cell("C2", "=1/0");
@@ -75,6 +82,22 @@ int main() {
   workbook.set_cell("e1", "99");
   workbook.recalculate_from("e1");
   expect_equal(workbook.cell("E1").display, "99", "lowercase ids should normalize");
+
+  Workbook restored;
+  restored.set_cell("Z9", "legacy");
+  minisheet::restore_workbook_from_browser_draft(
+      restored,
+      {
+          {"A1", "8"},
+          {"B1", "=A1+2"},
+          {"C1", "=D1"},
+          {"D1", "=C1"},
+      });
+  expect_true(!restored.has_cell("Z9"), "browser draft restore should replace previous workbook contents");
+  expect_equal(restored.cell("A1").display, "8", "restored A1 should keep literal values");
+  expect_equal(restored.cell("B1").display, "10", "restored formulas should recalculate");
+  expect_equal(restored.cell("C1").display, "#NA", "restored cycles should stay invalid");
+  expect_equal(restored.cell("D1").display, "#NA", "restored cycle peers should stay invalid");
 
   std::filesystem::path temp_dir = std::filesystem::temp_directory_path();
   std::filesystem::path dat_path = temp_dir / "minisheet_test.dat";

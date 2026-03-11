@@ -5,6 +5,7 @@ import { formatInsightValue, type SelectionStats } from '../spreadsheet/adapter'
 type StatusBarProps = {
   status: string;
   workbookTitle: string;
+  onWorkbookTitleChange: (nextTitle: string) => void;
   rangeRef: string;
   stats: SelectionStats;
   nonEmptyCount: number;
@@ -14,6 +15,7 @@ type StatusBarProps = {
 export function StatusBar({
   status,
   workbookTitle,
+  onWorkbookTitleChange,
   rangeRef,
   stats,
   nonEmptyCount,
@@ -27,7 +29,14 @@ export function StatusBar({
         <span className="status-divider" aria-hidden="true">
           ·
         </span>
-        <span className="status-title">{workbookTitle || '未命名'}</span>
+        <input
+          aria-label="工作簿名称"
+          className="status-title-input"
+          type="text"
+          value={workbookTitle}
+          placeholder="未命名"
+          onChange={(event) => onWorkbookTitleChange(event.target.value)}
+        />
       </div>
 
       <div className="status-center" aria-label="选区统计">
@@ -49,4 +58,3 @@ export function StatusBar({
     </footer>
   );
 }
-

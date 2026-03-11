@@ -44,4 +44,14 @@ std::string workbook_snapshot_json(const Workbook& workbook) {
   }).dump();
 }
 
+void restore_workbook_from_browser_draft(
+    Workbook& workbook,
+    const std::unordered_map<std::string, std::string>& cells) {
+  workbook.clear();
+  for (const auto& [cell_id, raw] : cells) {
+    workbook.set_cell(cell_id, raw);
+  }
+  workbook.recalculate_all();
+}
+
 }  // namespace minisheet
