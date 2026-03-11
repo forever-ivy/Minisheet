@@ -449,20 +449,42 @@ export default function App() {
     }
   }, [formulaTargetCellId, syncSnapshot]);
 
+  const replayDraftToBackend = useCallback(async (cells: Record<string, string>) => {
+    let lastSnapshot = await fetchJson<WorkbookSnapshot>(`${API_BASE}/api/snapshot`);
+    const draftCellIds = new Set(Object.keys(cells));
+
+    for (const [cellId, raw] of Object.entries(cells)) {
+      lastSnapshot = await fetchJson<WorkbookSnapshot>(`${API_BASE}/api/cell`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cellId, raw }),
+      });
+    }
+
+    for (const cellId of Object.keys(lastSnapshot.cells)) {
+      if (draftCellIds.has(cellId)) {
+        continue;
+      }
+
+      lastSnapshot = await fetchJson<WorkbookSnapshot>(`${API_BASE}/api/cell`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cellId, raw: '' }),
+      });
+    }
+
+    return lastSnapshot;
+  }, []);
+
   const restoreBrowserDraft = useCallback(async (draft: BrowserDraft) => {
-    const nextSnapshot = await fetchJson<WorkbookSnapshot>(`${API_BASE}/api/restore-browser-draft`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        workbookTitle: draft.workbookTitle,
-        cells: draft.cells,
-      }),
-    });
+    const nextSnapshot = await replayDraftToBackend(draft.cells);
     setWorkbookTitle(draft.workbookTitle || '未命名');
     syncSnapshot(nextSnapshot, 'A1');
-  }, [syncSnapshot]);
+  }, [replayDraftToBackend, syncSnapshot]);
 
   const loadInitialWorkbook = useCallback(async () => {
     const draft = parseBrowserDraft(window.sessionStorage.getItem(BROWSER_DRAFT_KEY));
@@ -475,7 +497,6 @@ export default function App() {
     try {
       await restoreBrowserDraft(draft);
     } catch (error) {
-      window.sessionStorage.removeItem(BROWSER_DRAFT_KEY);
       console.error(error);
       await loadSnapshot();
     }

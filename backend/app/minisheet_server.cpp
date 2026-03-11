@@ -9,6 +9,8 @@
 #include <iostream>
 #include <vector>
 
+using namespace std;
+
 int main() {
   minisheet::Workbook workbook;
   httplib::Server server;
@@ -35,7 +37,7 @@ int main() {
     try {
       nlohmann::json body = nlohmann::json::parse(request.body);
       workbook.set_cell(body.at("cellId").get<std::string>(), body.at("raw").get<std::string>());
-      workbook.recalculate_from(body.at("cellId").get<std::string>());
+      workbook.recalculate_all();
       response.set_content(minisheet::workbook_snapshot_json(workbook), "application/json");
     } catch (const std::exception& error) {
       response.status = 400;
@@ -62,28 +64,6 @@ int main() {
     }
   });
 
-  server.Post("/api/restore-browser-draft", [&](const httplib::Request& request, httplib::Response& response) {
-    try {
-      nlohmann::json body = nlohmann::json::parse(request.body);
-      std::unordered_map<std::string, std::string> cells;
-
-      if (body.contains("cells") && body.at("cells").is_object()) {
-        for (auto it = body.at("cells").begin(); it != body.at("cells").end(); ++it) {
-          if (!it.value().is_string()) {
-            throw std::runtime_error("draft cells must be strings");
-          }
-          cells[it.key()] = it.value().get<std::string>();
-        }
-      }
-
-      minisheet::restore_workbook_from_browser_draft(workbook, cells);
-      response.set_content(minisheet::workbook_snapshot_json(workbook), "application/json");
-    } catch (const std::exception& error) {
-      response.status = 400;
-      response.set_content(nlohmann::json({{"error", error.what()}}).dump(), "application/json");
-    }
-  });
-
   server.Post("/api/load-dat", [&](const httplib::Request& request, httplib::Response& response) {
     try {
       if (!request.form.has_file("dat")) {
@@ -93,7 +73,7 @@ int main() {
       }
 
       auto file = request.form.get_file("dat");
-      std::vector<char> bytes(file.content.begin(), file.content.end());
+      vector<char> bytes(file.content.begin(), file.content.end());
       workbook = minisheet::deserialize_workbook(bytes);
       response.set_content(minisheet::workbook_snapshot_json(workbook), "application/json");
     } catch (const std::exception& error) {
@@ -104,16 +84,16 @@ int main() {
 
   server.Post("/api/save-dat", [&](const httplib::Request&, httplib::Response& response) {
     try {
-      std::vector<char> bytes = minisheet::serialize_workbook(workbook);
+      vector<char> bytes = minisheet::serialize_workbook(workbook);
       response.set_header("Content-Disposition", "attachment; filename=\"workbook.dat\"");
-      response.set_content(std::string(bytes.begin(), bytes.end()), "application/octet-stream");
+      response.set_content(string(bytes.begin(), bytes.end()), "application/octet-stream");
     } catch (const std::exception& error) {
       response.status = 500;
       response.set_content(nlohmann::json({{"error", error.what()}}).dump(), "application/json");
     }
   });
 
-  std::cout << "minisheet_server listening on http://127.0.0.1:8080\n";
+  cout << "minisheet_server listening on http://127.0.0.1:8080\n";
   server.listen("127.0.0.1", 8080);
   return 0;
 }

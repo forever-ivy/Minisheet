@@ -2,10 +2,8 @@
 
 #include "minisheet/m1_types.h"
 
-#include <optional>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace minisheet {
@@ -18,8 +16,6 @@ struct CellRecord {
   CellKind kind = CellKind::Empty;
   bool has_numeric_value = false;
   double numeric_value = 0.0;
-  std::unordered_set<std::string> precedents;
-  std::unordered_set<std::string> dependents;
 };
 
 class Workbook {

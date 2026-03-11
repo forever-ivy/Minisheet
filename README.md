@@ -18,14 +18,13 @@
 - 支持 `sqrt`、`abs`、`sum(A1:B3)`、`avg(A1:B3)`
 - 字符串参与数值运算、非法引用、循环引用统一返回 `#NA`
 - 支持 CSV 导入、自定义 DAT 保存和 DAT 回读
-- CLI 支持 benchmark，输出平均耗时和存储效率
 
 ## 目录结构
 
-- `backend/`: `M1-M7` 后端核心、CLI、HTTP 服务、测试
+- `backend/`: `M1-M7` 后端核心、CLI、HTTP 服务
 - `frontend/`: `M8-M10` 前端展示、编辑和状态
-- `examples/`: 演示与 benchmark 用例
-- `scripts/`: 启动服务、跑 benchmark、接口 smoke test
+- `examples/`: 演示用 CSV 样例
+- `scripts/`: 启动服务、接口 smoke test
 - `vendor/`: 第三方头文件
 
 ## 启动后端
@@ -48,23 +47,16 @@ bash scripts/start_demo.sh
 ./backend/build/minisheet_cli import examples/basic-demo.csv
 ./backend/build/minisheet_cli save examples/basic-demo.csv /tmp/minisheet.dat
 ./backend/build/minisheet_cli load /tmp/minisheet.dat
-./backend/build/minisheet_cli benchmark \
-  examples/benchmark-case-1.csv \
-  examples/benchmark-case-2.csv \
-  examples/benchmark-case-3.csv
 ```
 
 ## 老师验收建议流程
 
 1. 用 CLI 导入测试 CSV
 2. 保存 DAT 并重新加载 DAT
-3. 运行 benchmark，记录 `averageMs` 与 `storageEfficiencyPct`
-4. 再打开前端页面做表格编辑和公式演示
+3. 再打开前端页面做表格编辑和公式演示
 
 ## 当前验证命令
 
 ```bash
-cd backend/build && ./core_tests
-bash scripts/run_example_benchmark.sh
 bash scripts/test_server_api.sh
 ```

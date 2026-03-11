@@ -2,10 +2,12 @@
 
 #include "json.hpp"
 
+using namespace std;
+
 namespace minisheet {
 namespace {
 
-std::string cell_kind_to_string(CellKind kind) {
+string cell_kind_to_string(CellKind kind) {
   switch (kind) {
     case CellKind::Empty:
       return "empty";
@@ -23,9 +25,9 @@ std::string cell_kind_to_string(CellKind kind) {
 
 }  // namespace
 
-std::string workbook_snapshot_json(const Workbook& workbook) {
+string workbook_snapshot_json(const Workbook& workbook) {
   nlohmann::json cells = nlohmann::json::object();
-  for (const std::string& id : workbook.ordered_cell_ids()) {
+  for (const string& id : workbook.ordered_cell_ids()) {
     const CellRecord& cell = workbook.cell(id);
     cells[id] = {
         {"id", cell.id},
@@ -42,16 +44,6 @@ std::string workbook_snapshot_json(const Workbook& workbook) {
       {"computeMs", workbook.last_compute_ms()},
       {"cells", cells},
   }).dump();
-}
-
-void restore_workbook_from_browser_draft(
-    Workbook& workbook,
-    const std::unordered_map<std::string, std::string>& cells) {
-  workbook.clear();
-  for (const auto& [cell_id, raw] : cells) {
-    workbook.set_cell(cell_id, raw);
-  }
-  workbook.recalculate_all();
 }
 
 }  // namespace minisheet

@@ -4,9 +4,7 @@
 
 namespace minisheet {
 
-void rebuild_dependencies(Workbook& workbook);
 void recalculate_all_cells(Workbook& workbook);
 void recalculate_impacted_cells(Workbook& workbook, const std::string& cell_id);
 
 }  // namespace minisheet
-

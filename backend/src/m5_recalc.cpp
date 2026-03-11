@@ -6,131 +6,150 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <optional>
-#include <unordered_map>
-#include <unordered_set>
+#include <vector>
+
+using namespace std;
 
 namespace minisheet {
 namespace {
 
-enum class EvalState {
-  Unvisited,
-  Visiting,
-  Done,
-};
+bool contains_id(const vector<string>& ids, const string& id) {
+  return find(ids.begin(), ids.end(), id) != ids.end();
+}
 
-std::optional<double> evaluate_cell_numeric(Workbook& workbook,
-                                            const std::string& cell_id,
-                                            std::unordered_map<std::string, EvalState>& states);
+void forget_id(vector<string>& ids, const string& id) {
+  ids.erase(remove(ids.begin(), ids.end(), id), ids.end());
+}
 
-std::optional<double> evaluate_range_numeric(Workbook& workbook,
-                                             const CellRange& range,
-                                             bool average,
-                                             std::unordered_map<std::string, EvalState>& states) {
-  int min_row = std::min(range.start.row, range.end.row);
-  int max_row = std::max(range.start.row, range.end.row);
-  int min_column = std::min(range.start.column, range.end.column);
-  int max_column = std::max(range.start.column, range.end.column);
+void set_formula_error(CellRecord& cell) {
+  cell.error = "#NA";
+  cell.display = "#NA";
+  cell.has_numeric_value = false;
+  cell.numeric_value = 0.0;
+}
+
+bool evaluate_cell_numeric(Workbook& workbook,
+                           const string& cell_id,
+                           vector<string>& visiting,
+                           vector<string>& finished,
+                           double& value);
+
+bool evaluate_range_numeric(Workbook& workbook,
+                            const CellRange& range,
+                            bool average,
+                            vector<string>& visiting,
+                            vector<string>& finished,
+                            double& value) {
+  int min_row = min(range.start.row, range.end.row);
+  int max_row = max(range.start.row, range.end.row);
+  int min_column = min(range.start.column, range.end.column);
+  int max_column = max(range.start.column, range.end.column);
 
   double total = 0.0;
   int count = 0;
 
   for (int row = min_row; row <= max_row; ++row) {
     for (int column = min_column; column <= max_column; ++column) {
-      const std::string current_id = to_cell_id({row, column});
-      bool exists = workbook.has_cell(current_id);
-      const CellRecord& current = workbook.cell(current_id);
-
-      if (!exists || current.kind == CellKind::Empty || current.kind == CellKind::String) {
+      const string current_id = to_cell_id({row, column});
+      if (!workbook.has_cell(current_id)) {
         continue;
       }
 
-      std::optional<double> value = evaluate_cell_numeric(workbook, current_id, states);
-      if (!value.has_value()) {
-        return std::nullopt;
+      const CellRecord& current = workbook.cell(current_id);
+
+      if (current.kind == CellKind::Empty || current.kind == CellKind::String) {
+        continue;
       }
 
-      total += value.value();
+      double cell_value = 0.0;
+      if (!evaluate_cell_numeric(workbook, current_id, visiting, finished, cell_value)) {
+        return false;
+      }
+
+      total += cell_value;
       count += 1;
     }
   }
 
   if (average) {
     if (count == 0) {
-      return std::nullopt;
+      return false;
     }
-    return total / static_cast<double>(count);
+    value = total / static_cast<double>(count);
+    return true;
   }
 
-  return total;
+  value = total;
+  return true;
 }
 
-std::optional<double> evaluate_cell_numeric(Workbook& workbook,
-                                            const std::string& cell_id,
-                                            std::unordered_map<std::string, EvalState>& states) {
+bool evaluate_cell_numeric(Workbook& workbook,
+                           const string& cell_id,
+                           vector<string>& visiting,
+                           vector<string>& finished,
+                           double& value) {
   if (!is_valid_cell_id(cell_id)) {
-    return std::nullopt;
+    return false;
   }
 
   if (!workbook.has_cell(cell_id)) {
-    return 0.0;
+    value = 0.0;
+    return true;
   }
 
   CellRecord& cell = workbook.mutable_cells().at(cell_id);
   switch (cell.kind) {
     case CellKind::Empty:
-      return 0.0;
+      value = 0.0;
+      return true;
     case CellKind::Integer:
     case CellKind::Float:
-      return cell.numeric_value;
+      value = cell.numeric_value;
+      return true;
     case CellKind::String:
-      return std::nullopt;
+      return false;
     case CellKind::Formula:
       break;
   }
 
-  EvalState state = states[cell_id];
-  if (state == EvalState::Visiting) {
-    cell.error = "#NA";
-    cell.display = "#NA";
-    cell.has_numeric_value = false;
-    cell.numeric_value = 0.0;
-    return std::nullopt;
-  }
-
-  if (state == EvalState::Done) {
-    if (cell.has_numeric_value) {
-      return cell.numeric_value;
+  if (contains_id(finished, cell_id)) {
+    if (!cell.has_numeric_value) {
+      return false;
     }
-    return std::nullopt;
+    value = cell.numeric_value;
+    return true;
   }
 
-  states[cell_id] = EvalState::Visiting;
+  if (contains_id(visiting, cell_id)) {
+    set_formula_error(cell);
+    return false;
+  }
+
+  visiting.push_back(cell_id);
   FormulaEvalResult eval_result = evaluate_formula(
       cell.raw,
-      [&](const std::string& dependency_id) -> std::optional<double> {
-        return evaluate_cell_numeric(workbook, dependency_id, states);
+      [&](const string& dependency_id, double& dependency_value) -> bool {
+        return evaluate_cell_numeric(workbook, dependency_id, visiting, finished, dependency_value);
       },
-      [&](const CellRange& range, bool average) -> std::optional<double> {
-        return evaluate_range_numeric(workbook, range, average, states);
+      [&](const CellRange& range, bool average, double& range_value) -> bool {
+        return evaluate_range_numeric(workbook, range, average, visiting, finished, range_value);
       });
 
-  cell.precedents = eval_result.references;
   if (!eval_result.ok || !std::isfinite(eval_result.value)) {
-    cell.error = "#NA";
-    cell.display = "#NA";
-    cell.has_numeric_value = false;
-    cell.numeric_value = 0.0;
-    states[cell_id] = EvalState::Done;
-    return std::nullopt;
+    set_formula_error(cell);
+    forget_id(visiting, cell_id);
+    finished.push_back(cell_id);
+    return false;
   }
 
   cell.error.clear();
   cell.has_numeric_value = true;
   cell.numeric_value = eval_result.value;
   cell.display = format_number(eval_result.value);
-  states[cell_id] = EvalState::Done;
-  return eval_result.value;
+  value = eval_result.value;
+  forget_id(visiting, cell_id);
+  finished.push_back(cell_id);
+  return true;
 }
 
 void refresh_all_literal_cells(Workbook& workbook) {
@@ -139,47 +158,19 @@ void refresh_all_literal_cells(Workbook& workbook) {
   }
 }
 
-void clear_dependencies(Workbook& workbook) {
-  for (auto& item : workbook.mutable_cells()) {
-    item.second.precedents.clear();
-    item.second.dependents.clear();
-  }
-}
-
 }  // namespace
-
-void rebuild_dependencies(Workbook& workbook) {
-  clear_dependencies(workbook);
-  for (auto& item : workbook.mutable_cells()) {
-    CellRecord& cell = item.second;
-    if (cell.kind != CellKind::Formula) {
-      continue;
-    }
-
-    cell.precedents = extract_formula_references(cell.raw);
-    for (const std::string& dependency_id : cell.precedents) {
-      auto dependency = workbook.mutable_cells().find(dependency_id);
-      if (dependency != workbook.mutable_cells().end()) {
-        dependency->second.dependents.insert(cell.id);
-      }
-    }
-  }
-}
 
 void recalculate_all_cells(Workbook& workbook) {
   auto start = std::chrono::steady_clock::now();
 
   refresh_all_literal_cells(workbook);
-  rebuild_dependencies(workbook);
-
-  std::unordered_map<std::string, EvalState> states;
-  for (const auto& item : workbook.cells()) {
-    states[item.first] = EvalState::Unvisited;
-  }
+  vector<string> visiting;
+  vector<string> finished;
 
   for (const auto& item : workbook.cells()) {
     if (item.second.kind == CellKind::Formula) {
-      (void)evaluate_cell_numeric(workbook, item.first, states);
+      double numeric_value = 0.0;
+      (void)evaluate_cell_numeric(workbook, item.first, visiting, finished, numeric_value);
     }
   }
 

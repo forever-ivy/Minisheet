@@ -5,10 +5,12 @@
 
 #include <algorithm>
 
+using namespace std;
+
 namespace minisheet {
 namespace {
 
-std::string normalize_cell_id(const std::string& cell_id) {
+string normalize_cell_id(const string& cell_id) {
   return to_cell_id(parse_cell_id(cell_id));
 }
 
@@ -20,7 +22,7 @@ void Workbook::clear() {
 }
 
 void Workbook::set_cell(const std::string& cell_id, const std::string& raw) {
-  const std::string normalized_id = normalize_cell_id(cell_id);
+  const string normalized_id = normalize_cell_id(cell_id);
   CellCoord coord = parse_cell_id(normalized_id);
   (void)coord;
 
@@ -32,13 +34,11 @@ void Workbook::set_cell(const std::string& cell_id, const std::string& raw) {
   CellRecord& cell_record = cells_[normalized_id];
   cell_record.id = normalized_id;
   cell_record.raw = raw;
-  cell_record.precedents.clear();
-  cell_record.dependents.clear();
   refresh_literal_cell(cell_record);
 }
 
 const CellRecord& Workbook::cell(const std::string& cell_id) const {
-  const std::string normalized_id = normalize_cell_id(cell_id);
+  const string normalized_id = normalize_cell_id(cell_id);
   auto iterator = cells_.find(normalized_id);
   if (iterator == cells_.end()) {
     empty_cell_ = {};
@@ -49,26 +49,24 @@ const CellRecord& Workbook::cell(const std::string& cell_id) const {
     empty_cell_.error.clear();
     empty_cell_.has_numeric_value = false;
     empty_cell_.numeric_value = 0.0;
-    empty_cell_.precedents.clear();
-    empty_cell_.dependents.clear();
     return empty_cell_;
   }
   return iterator->second;
 }
 
 bool Workbook::has_cell(const std::string& cell_id) const {
-  const std::string normalized_id = normalize_cell_id(cell_id);
+  const string normalized_id = normalize_cell_id(cell_id);
   return cells_.find(normalized_id) != cells_.end();
 }
 
-std::vector<std::string> Workbook::ordered_cell_ids() const {
-  std::vector<std::string> ids;
+vector<string> Workbook::ordered_cell_ids() const {
+  vector<string> ids;
   ids.reserve(cells_.size());
   for (const auto& item : cells_) {
     ids.push_back(item.first);
   }
 
-  std::sort(ids.begin(), ids.end(), [](const std::string& left, const std::string& right) {
+  sort(ids.begin(), ids.end(), [](const string& left, const string& right) {
     CellCoord lhs = parse_cell_id(left);
     CellCoord rhs = parse_cell_id(right);
     if (lhs.row != rhs.row) {

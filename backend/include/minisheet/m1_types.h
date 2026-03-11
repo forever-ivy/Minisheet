@@ -1,6 +1,5 @@
 #pragma once
 
-#include <optional>
 #include <string>
 
 namespace minisheet {
@@ -39,4 +38,3 @@ std::string read_text_file(const std::string& path);
 void write_text_file(const std::string& path, const std::string& content);
 
 }  // namespace minisheet
-
