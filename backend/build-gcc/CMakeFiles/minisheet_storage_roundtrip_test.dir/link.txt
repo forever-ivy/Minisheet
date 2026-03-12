@@ -1,0 +1,1 @@
+/opt/homebrew/bin/g++-15  -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/minisheet_storage_roundtrip_test.dir/tests/storage_roundtrip.cpp.o -o minisheet_storage_roundtrip_test  libminisheet_core.a

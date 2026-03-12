@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/Code/Minisheet/backend/build-gcc/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,17 +1,3 @@
-/**
- * @file minisheet_server.cpp
- * @brief HTTP API 服务器入口
- *
- * 提供 RESTful API 用于前端交互：
- * - GET  /api/snapshot   - 获取工作簿快照
- * - POST /api/cell       - 设置单元格内容
- * - POST /api/import-csv - 导入 CSV 文件
- * - POST /api/load-dat   - 加载 DAT 文件
- * - POST /api/save-dat   - 保存为 DAT 文件
- *
- * 端口优先级：命令行参数 > MINISHEET_PORT 环境变量 > 默认 8080
- */
-
 #include "minisheet/m6_storage.h"
 #include "minisheet/m7_api.h"
 
@@ -27,13 +13,11 @@
 
 using namespace std;
 
-namespace {
+int parse_port_text(const char* wenben) {
+  if (wenben == nullptr) {
+    return 0;
+  }
 
-// ----------------------------------------------------------------------------
-// 解析端口号字符串
-// 返回：有效端口号（1-65535）或 0（无效）
-// ----------------------------------------------------------------------------
-int parse_port_value(const string& wenben) {
   try {
     int duankou = stoi(wenben);
     if (duankou > 0 && duankou <= 65535) {
@@ -45,143 +29,138 @@ int parse_port_value(const string& wenben) {
   return 0;
 }
 
-// ----------------------------------------------------------------------------
-// 读取服务器端口
-// 优先级：命令行参数 > 环境变量 MINISHEET_PORT > 默认 8080
-// ----------------------------------------------------------------------------
+void set_json_error(httplib::Response& xiangying, int zhuangtai, const string& cuowu) {
+  xiangying.status = zhuangtai;
+  xiangying.set_content(nlohmann::json({{"error", cuowu}}).dump(), "application/json");
+}
+
+void set_json_response(httplib::Response& xiangying, const string& neirong) {
+  xiangying.set_content(neirong, "application/json");
+}
+
 int read_port(int argc, char** argv) {
   if (argc >= 2) {
-    int duankou = parse_port_value(argv[1]);
+    int duankou = parse_port_text(argv[1]);
     if (duankou != 0) {
       return duankou;
     }
   }
 
-  const char* huanjing_duankou = getenv("MINISHEET_PORT");
-  if (huanjing_duankou != nullptr) {
-    int duankou = parse_port_value(huanjing_duankou);
-    if (duankou != 0) {
-      return duankou;
-    }
+  int duankou = parse_port_text(getenv("MINISHEET_PORT"));
+  if (duankou != 0) {
+    return duankou;
   }
 
   return 8080;
 }
 
-}  // namespace
+void handle_options(const httplib::Request&, httplib::Response& xiangying) {
+  xiangying.status = 204;
+}
 
-// ----------------------------------------------------------------------------
-// HTTP 服务器主函数
-// ----------------------------------------------------------------------------
+void handle_snapshot(Workbook& gongzuobu, const httplib::Request&, httplib::Response& xiangying) {
+  try {
+    set_json_response(xiangying, workbook_snapshot_json(gongzuobu));
+  } catch (const exception& cuowu) {
+    set_json_error(xiangying, 500, cuowu.what());
+  }
+}
+
+void handle_cell(Workbook& gongzuobu,
+                 const httplib::Request& qingqiu,
+                 httplib::Response& xiangying) {
+  try {
+    nlohmann::json qingqiu_ti = nlohmann::json::parse(qingqiu.body);
+    set_cell(gongzuobu, qingqiu_ti.at("cellId").get<string>(), qingqiu_ti.at("raw").get<string>());
+    recalculate_all(gongzuobu);
+    set_json_response(xiangying, workbook_snapshot_json(gongzuobu));
+  } catch (const exception& cuowu) {
+    set_json_error(xiangying, 400, cuowu.what());
+  }
+}
+
+void handle_import_csv(Workbook& gongzuobu,
+                       const httplib::Request& qingqiu,
+                       httplib::Response& xiangying) {
+  try {
+    if (!qingqiu.form.has_file("csv")) {
+      set_json_error(xiangying, 400, "missing csv file");
+      return;
+    }
+
+    auto wenjian = qingqiu.form.get_file("csv");
+    filesystem::path linshi_lujing = filesystem::temp_directory_path() / "minisheet_upload.csv";
+    write_text_file(linshi_lujing.string(), wenjian.content);
+    gongzuobu = load_csv(linshi_lujing.string());
+    set_json_response(xiangying, workbook_snapshot_json(gongzuobu));
+  } catch (const exception& cuowu) {
+    set_json_error(xiangying, 400, cuowu.what());
+  }
+}
+
+void handle_load_dat(Workbook& gongzuobu,
+                     const httplib::Request& qingqiu,
+                     httplib::Response& xiangying) {
+  try {
+    if (!qingqiu.form.has_file("dat")) {
+      set_json_error(xiangying, 400, "missing dat file");
+      return;
+    }
+
+    auto wenjian = qingqiu.form.get_file("dat");
+    vector<char> zijie_men(wenjian.content.begin(), wenjian.content.end());
+    gongzuobu = deserialize_workbook(zijie_men);
+    set_json_response(xiangying, workbook_snapshot_json(gongzuobu));
+  } catch (const exception& cuowu) {
+    set_json_error(xiangying, 400, cuowu.what());
+  }
+}
+
+void handle_save_dat(Workbook& gongzuobu, const httplib::Request&, httplib::Response& xiangying) {
+  try {
+    vector<char> zijie_men = serialize_workbook(gongzuobu);
+    xiangying.set_header("Content-Disposition", "attachment; filename=\"workbook.dat\"");
+    xiangying.set_content(string(zijie_men.begin(), zijie_men.end()), "application/octet-stream");
+  } catch (const exception& cuowu) {
+    set_json_error(xiangying, 500, cuowu.what());
+  }
+}
+
 int main(int argc, char** argv) {
-  minisheet::Workbook gongzuobu;
+  Workbook gongzuobu;
   httplib::Server fuwuqi;
   int duankou = read_port(argc, argv);
 
-  // 设置 CORS 头，允许前端跨域访问
   fuwuqi.set_default_headers({
       {"Access-Control-Allow-Origin", "*"},
       {"Access-Control-Allow-Headers", "Content-Type"},
       {"Access-Control-Allow-Methods", "GET, POST, OPTIONS"},
   });
 
-  // 处理预检请求
-  fuwuqi.Options(R"(.*)", [&](const httplib::Request&, httplib::Response& xiangying) {
-    xiangying.status = 204;
+  fuwuqi.Options(R"(.*)", [&](const httplib::Request& qingqiu, httplib::Response& xiangying) {
+    handle_options(qingqiu, xiangying);
   });
 
-  // ----------------------------------------------------------------------------
-  // GET /api/snapshot - 获取工作簿完整快照
-  // 返回：包含所有单元格和元数据的 JSON
-  // ----------------------------------------------------------------------------
-  fuwuqi.Get("/api/snapshot", [&](const httplib::Request&, httplib::Response& xiangying) {
-    try {
-      xiangying.set_content(minisheet::workbook_snapshot_json(gongzuobu), "application/json");
-    } catch (const std::exception& cuowu) {
-      xiangying.status = 500;
-      xiangying.set_content(nlohmann::json({{"error", cuowu.what()}}).dump(), "application/json");
-    }
+  fuwuqi.Get("/api/snapshot", [&](const httplib::Request& qingqiu, httplib::Response& xiangying) {
+    handle_snapshot(gongzuobu, qingqiu, xiangying);
   });
 
-  // ----------------------------------------------------------------------------
-  // POST /api/cell - 设置单元格内容
-  // 请求体：{"cellId": "A1", "raw": "=B1+C1"}
-  // 返回：更新后的工作簿快照
-  // ----------------------------------------------------------------------------
   fuwuqi.Post("/api/cell", [&](const httplib::Request& qingqiu, httplib::Response& xiangying) {
-    try {
-      nlohmann::json qingqiu_ti = nlohmann::json::parse(qingqiu.body);
-      gongzuobu.set_cell(qingqiu_ti.at("cellId").get<std::string>(),
-                         qingqiu_ti.at("raw").get<std::string>());
-      gongzuobu.recalculate_all();
-      xiangying.set_content(minisheet::workbook_snapshot_json(gongzuobu), "application/json");
-    } catch (const std::exception& cuowu) {
-      xiangying.status = 400;
-      xiangying.set_content(nlohmann::json({{"error", cuowu.what()}}).dump(), "application/json");
-    }
+    handle_cell(gongzuobu, qingqiu, xiangying);
   });
 
-  // ----------------------------------------------------------------------------
-  // POST /api/import-csv - 导入 CSV 文件
-  // 上传文件字段名：csv
-  // ----------------------------------------------------------------------------
   fuwuqi.Post("/api/import-csv",
               [&](const httplib::Request& qingqiu, httplib::Response& xiangying) {
-    try {
-      if (!qingqiu.form.has_file("csv")) {
-        xiangying.status = 400;
-        xiangying.set_content(R"({"error":"missing csv file"})", "application/json");
-        return;
-      }
-
-      auto wenjian = qingqiu.form.get_file("csv");
-      std::filesystem::path linshi_lujing =
-          std::filesystem::temp_directory_path() / "minisheet_upload.csv";
-      minisheet::write_text_file(linshi_lujing.string(), wenjian.content);
-      gongzuobu = minisheet::load_csv(linshi_lujing.string());
-      xiangying.set_content(minisheet::workbook_snapshot_json(gongzuobu), "application/json");
-    } catch (const std::exception& cuowu) {
-      xiangying.status = 400;
-      xiangying.set_content(nlohmann::json({{"error", cuowu.what()}}).dump(), "application/json");
-    }
+    handle_import_csv(gongzuobu, qingqiu, xiangying);
   });
 
-  // ----------------------------------------------------------------------------
-  // POST /api/load-dat - 加载 DAT 文件
-  // 上传文件字段名：dat
-  // ----------------------------------------------------------------------------
   fuwuqi.Post("/api/load-dat",
               [&](const httplib::Request& qingqiu, httplib::Response& xiangying) {
-    try {
-      if (!qingqiu.form.has_file("dat")) {
-        xiangying.status = 400;
-        xiangying.set_content(R"({"error":"missing dat file"})", "application/json");
-        return;
-      }
-
-      auto wenjian = qingqiu.form.get_file("dat");
-      vector<char> zijie_men(wenjian.content.begin(), wenjian.content.end());
-      gongzuobu = minisheet::deserialize_workbook(zijie_men);
-      xiangying.set_content(minisheet::workbook_snapshot_json(gongzuobu), "application/json");
-    } catch (const std::exception& cuowu) {
-      xiangying.status = 400;
-      xiangying.set_content(nlohmann::json({{"error", cuowu.what()}}).dump(), "application/json");
-    }
+    handle_load_dat(gongzuobu, qingqiu, xiangying);
   });
 
-  // ----------------------------------------------------------------------------
-  // POST /api/save-dat - 保存为 DAT 文件
-  // 返回：二进制 DAT 文件（下载）
-  // ----------------------------------------------------------------------------
-  fuwuqi.Post("/api/save-dat", [&](const httplib::Request&, httplib::Response& xiangying) {
-    try {
-      vector<char> zijie_men = minisheet::serialize_workbook(gongzuobu);
-      xiangying.set_header("Content-Disposition", "attachment; filename=\"workbook.dat\"");
-      xiangying.set_content(string(zijie_men.begin(), zijie_men.end()), "application/octet-stream");
-    } catch (const std::exception& cuowu) {
-      xiangying.status = 500;
-      xiangying.set_content(nlohmann::json({{"error", cuowu.what()}}).dump(), "application/json");
-    }
+  fuwuqi.Post("/api/save-dat", [&](const httplib::Request& qingqiu, httplib::Response& xiangying) {
+    handle_save_dat(gongzuobu, qingqiu, xiangying);
   });
 
   cout << "minisheet_server listening on http://127.0.0.1:" << duankou << "\n";

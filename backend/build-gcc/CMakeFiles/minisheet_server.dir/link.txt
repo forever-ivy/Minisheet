@@ -1,0 +1,1 @@
+/opt/homebrew/bin/g++-15  -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/minisheet_server.dir/app/minisheet_server.cpp.o -o minisheet_server  libminisheet_core.a

@@ -48,6 +48,8 @@ bash scripts/start_demo.sh
 ./backend/build/minisheet_cli import examples/basic-demo.csv
 ./backend/build/minisheet_cli save examples/basic-demo.csv /tmp/minisheet.dat
 ./backend/build/minisheet_cli load /tmp/minisheet.dat
+./backend/build/minisheet_cli pack examples/basic-demo.csv /tmp/minisheet.dat
+./backend/build/minisheet_cli unpack /tmp/minisheet.dat /tmp/minisheet.csv
 ```
 
 ## 老师验收建议流程
