@@ -43,6 +43,10 @@ module.exports = {
   },
   makers: [
     {
+      name: '@electron-forge/maker-squirrel',
+      platforms: ['win32'],
+    },
+    {
       name: '@electron-forge/maker-zip',
       platforms: ['darwin', 'win32'],
     },

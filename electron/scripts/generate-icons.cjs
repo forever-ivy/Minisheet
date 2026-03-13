@@ -1,6 +1,4 @@
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const { spawnSync } = require('child_process');
 const {
   getAssetsDir,
@@ -56,34 +54,17 @@ function generateMacIcon() {
     return;
   }
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minisheet-iconset-'));
-  const iconsetDir = path.join(tempDir, 'Minisheet.iconset');
   const sourcePath = getIconSourcePath();
   const macIconPath = getMacIconPath();
-  const sizes = [
-    ['icon_16x16.png', 16],
-    ['icon_16x16@2x.png', 32],
-    ['icon_32x32.png', 32],
-    ['icon_32x32@2x.png', 64],
-    ['icon_128x128.png', 128],
-    ['icon_128x128@2x.png', 256],
-    ['icon_256x256.png', 256],
-    ['icon_256x256@2x.png', 512],
-    ['icon_512x512.png', 512],
-    ['icon_512x512@2x.png', 1024],
-  ];
+  const script = [
+    'from PIL import Image',
+    'import sys',
+    'source_path, output_path = sys.argv[1], sys.argv[2]',
+    'image = Image.open(source_path).convert("RGBA")',
+    'image.save(output_path, format="ICNS")',
+  ].join('\n');
 
-  fs.mkdirSync(iconsetDir, { recursive: true });
-
-  try {
-    for (const [filename, size] of sizes) {
-      run('sips', ['-z', String(size), String(size), sourcePath, '--out', path.join(iconsetDir, filename)]);
-    }
-
-    run('iconutil', ['-c', 'icns', iconsetDir, '-o', macIconPath]);
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+  run('python3', ['-c', script, sourcePath, macIconPath]);
 }
 
 function generateIcons() {

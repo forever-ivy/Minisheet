@@ -81,12 +81,13 @@ npm --prefix electron run make:win
 
 说明：
 
-- `make:mac` 需要在 macOS 上执行
-- `make:win` 现在默认打 `win32/x64`
+- `make:mac` 在 macOS 上打 Apple Silicon `darwin/arm64` 包
+- `make:win` 保持现有 Forge 流程，目标为 `win32/x64`，会生成 Windows 安装器产物（含 `Setup.exe`）以及 zip 包
 - 如果你在 macOS 上交叉打 Windows 包，需要先安装 `mingw-w64`：
 
 ```bash
 brew install mingw-w64
 ```
 
-- 当前产物是未签名的 zip 便携包，首次打开时系统可能会提示未知来源
+- 由于 Electron Forge 的 Squirrel.Windows maker 不支持在 macOS 主机上构建 Windows 安装器，`make:win` 的 `Setup.exe` 需要在 Windows 主机，或安装了 wine/mono 的 Linux 环境中执行
+- 当前产物是未签名包，首次打开或安装时系统可能会提示未知来源

@@ -1,0 +1,9 @@
+#!/bin/sh
+
+for candidate in /usr/bin/wine64 /usr/local/bin/wine64 /opt/homebrew/bin/wine64; do
+  if [ -x "$candidate" ]; then
+    exec "$candidate" "$@"
+  fi
+done
+
+exec wine "$@"

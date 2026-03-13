@@ -16,9 +16,10 @@ using namespace std;
 // 公式计算结果结构体
 // chenggong: 计算是否成功
 // shuzhi: 计算出的数值（只有chenggong为true时才有效）
-struct FormulaEvalResult {
-  bool chenggong = false;  // 是否成功
-  double shuzhi = 0.0;     // 计算结果
+struct FormulaEvalResult
+{
+  bool chenggong = false; // 是否成功
+  double shuzhi = 0.0;    // 计算结果
 };
 
 // 计算单个单元格的数值
@@ -28,27 +29,27 @@ struct FormulaEvalResult {
 // yiwancheng: 已经计算完成的单元格列表
 // shuzhi: 输出的数值
 // 返回值true表示成功，false表示失败（循环引用、公式错误等）
-bool evaluate_cell_numeric(Workbook& gongzuobu,
-                           const string& danyuange_id,
-                           vector<string>& fangwen_zhong,
-                           vector<string>& yiwancheng,
-                           double& shuzhi);
+bool evaluate_cell_numeric(Workbook &gongzuobu,
+                           const string &danyuange_id,
+                           vector<string> &fangwen_zhong,
+                           vector<string> &yiwancheng,
+                           double &shuzhi);
 
 // 计算一个范围内的数值总和或平均值
 // fanwei: 单元格范围，比如 A1:B10
 // shi_pingjun: true算平均值，false算总和
 // 其他的参数跟上面那个函数一样
-bool evaluate_range_numeric(Workbook& gongzuobu,
-                            const CellRange& fanwei,
+bool evaluate_range_numeric(Workbook &gongzuobu,
+                            const CellRange &fanwei,
                             bool shi_pingjun,
-                            vector<string>& fangwen_zhong,
-                            vector<string>& yiwancheng,
-                            double& shuzhi);
+                            vector<string> &fangwen_zhong,
+                            vector<string> &yiwancheng,
+                            double &shuzhi);
 
 // 计算公式字符串
 // gongshi: 公式字符串，比如 "=A1+B1" 或 "SUM(A1:A10)"
 // 返回计算结果结构体，包含成功标志和数值
-FormulaEvalResult evaluate_formula(Workbook& gongzuobu,
-                                   const string& gongshi,
-                                   vector<string>& fangwen_zhong,
-                                   vector<string>& yiwancheng);
+FormulaEvalResult evaluate_formula(Workbook &gongzuobu,
+                                   const string &gongshi,
+                                   vector<string> &fangwen_zhong,
+                                   vector<string> &yiwancheng);
