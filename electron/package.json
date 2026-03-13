@@ -2,6 +2,8 @@
   "name": "minisheet-desktop",
   "productName": "Minisheet",
   "version": "0.1.0",
+  "description": "An Electron desktop shell for the Minisheet spreadsheet project.",
+  "author": "Minisheet Contributors",
   "private": true,
   "main": "main.js",
   "scripts": {
@@ -14,10 +16,11 @@
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:app\"",
     "make": "npm run prepare:desktop && electron-forge make",
     "make:mac": "cross-env MINISHEET_TARGET_PLATFORM=darwin MINISHEET_TARGET_ARCH=arm64 npm run prepare:desktop && cross-env MINISHEET_TARGET_PLATFORM=darwin MINISHEET_TARGET_ARCH=arm64 electron-forge make --platform=darwin --arch=arm64",
-    "make:win": "cross-env MINISHEET_TARGET_PLATFORM=win32 MINISHEET_TARGET_ARCH=x64 npm run prepare:desktop && cross-env MINISHEET_TARGET_PLATFORM=win32 MINISHEET_TARGET_ARCH=x64 electron-forge make --platform=win32 --arch=x64"
+    "make:win": "cross-env MINISHEET_TARGET_PLATFORM=win32 MINISHEET_TARGET_ARCH=x64 npm run prepare:desktop && cross-env MINISHEET_TARGET_PLATFORM=win32 MINISHEET_TARGET_ARCH=x64 node ./scripts/run-forge-make.cjs --platform=win32 --arch=x64"
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
     "@electron-forge/maker-zip": "7.11.1",
     "concurrently": "9.2.1",
     "cross-env": "10.1.0",
