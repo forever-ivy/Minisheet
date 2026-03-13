@@ -3,6 +3,11 @@
 // ========================================
 // 这是工作簿（Workbook）的核心定义文件
 // 工作簿就是整个电子表格，里面包含了很多单元格
+// 这一层是“中心层”：
+// - 向下依赖 m1_types 提供的基础类型和坐标工具
+// - 向上被 m3_display / m4_formula / m5_recalc / m6_storage / m7_api 使用
+// - app 层（CLI / Server）最终几乎都是通过这里操作 Workbook
+// 所以如果你想搞清楚数据到底存在哪里，先看 m2
 // ========================================
 
 #include "minisheet/m1_types.h"
@@ -50,7 +55,9 @@ void clear(Workbook& gongzuobu);
 
 // 设置单元格的内容
 // 如果yuanshi是空字符串，就删除这个单元格
-// 否则就创建或更新这个单元格，并刷新它的显示值
+// 否则就创建或更新这个单元格，并刷新它的“字面值状态”
+// 注意：这里只做输入落库 + 基础分类，不会主动计算依赖它的公式
+// 真正的公式重算要靠 recalculate_all / recalculate_from 再往下调 m5 -> m4
 void set_cell(Workbook& gongzuobu, const string& danyuange_id, const string& yuanshi);
 
 // 获取单元格的信息
@@ -76,8 +83,11 @@ unordered_map<string, CellRecord>& mutable_cells(Workbook& gongzuobu);
 
 // 重新计算所有公式单元格
 // 遍历所有单元格，把所有Formula类型的都重新算一遍
+// 这是 m2 对外暴露的统一入口，内部会转发给 m5_recalc
+// 上层调用者通常不直接碰 m5，而是调这个函数
 void recalculate_all(Workbook& gongzuobu);
 
 // 从某个单元格开始重新计算
 // 这个会计算所有依赖这个单元格的公式（暂时实现是重算所有）
+// 设计上这是“增量重算入口”，目前内部仍然是走 m5 的全量重算
 void recalculate_from(Workbook& gongzuobu, const string& danyuange_id);

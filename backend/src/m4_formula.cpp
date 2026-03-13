@@ -1,6 +1,6 @@
 // ========================================
 // 公式计算实现文件
-// 这是最复杂的模块，要处理公式解析、计算、循环引用检测等
+// 这是最复杂的模块，要处理公式解析、计算、范围函数等
 // ========================================
 
 #include "minisheet/m4_formula.h"
@@ -115,17 +115,6 @@ bool contains_id(const vector<string>& id_men, const string& mubiao_id) {
   return false;
 }
 
-// 从数组里删除某个ID（只删第一个）
-void remove_id(vector<string>& id_men, const string& mubiao_id) {
-  for (size_t xiabiao = 0; xiabiao < id_men.size(); ++xiabiao) {
-    if (id_men[xiabiao] == mubiao_id) {
-      // 找到了，删除并返回
-      id_men.erase(id_men.begin() + static_cast<vector<string>::difference_type>(xiabiao));
-      return;
-    }
-  }
-}
-
 // 设置公式错误状态
 // 当公式计算出错时调用，把单元格标记为#NA
 void set_formula_error(CellRecord& danyuange) {
@@ -186,7 +175,6 @@ bool rewrite_expression(Workbook& gongzuobu,
       // 提取参数部分（括号里的内容）
       string canshu = shuru.substr(houkan_xiabiao + 1, bi_kuohao_xiabiao - houkan_xiabiao - 1);
 
-      // 处理SUM和AVG函数
       if (hanshu_ming == "sum" || hanshu_ming == "avg") {
         double hanshu_zhi = 0.0;
         CellRange fanwei;
@@ -285,7 +273,7 @@ bool evaluate_plain_expression(Workbook& gongzuobu,
     // 递归计算单元格的值
     if (!evaluate_cell_numeric(gongzuobu, mingcheng, fangwen_zhong, yiwancheng,
                                danyuange_shuzhi)) {
-      return false;  // 计算失败（可能是循环引用）
+      return false;  // 计算失败（公式错误、字符串参与计算等）
     }
     zhi_men.push_back(danyuange_shuzhi);
   }
@@ -424,13 +412,12 @@ FormulaEvalResult evaluate_formula(Workbook& gongzuobu,
 }
 
 // 计算单个单元格的数值
-// 这是递归调用的核心函数，要处理循环引用检测
+// 这是递归调用的核心函数
 bool evaluate_cell_numeric(Workbook& gongzuobu,
                            const string& danyuange_id,
                            vector<string>& fangwen_zhong,  // 当前访问栈
                            vector<string>& yiwancheng,      // 已完成的单元格
                            double& shuzhi) {
-  // 先检查ID是否合法
   if (!is_valid_cell_id(danyuange_id)) {
     return false;
   }
@@ -474,22 +461,13 @@ bool evaluate_cell_numeric(Workbook& gongzuobu,
     return true;
   }
 
-  // 检查是否有循环引用
-  // 如果当前单元格已经在访问栈里，说明形成了循环
-  if (contains_id(fangwen_zhong, danyuange_id)) {
-    set_formula_error(danyuange);  // 标记错误
-    return false;
-  }
-
-  // 把当前单元格压入访问栈
-  fangwen_zhong.push_back(danyuange_id);
+  // 当前简化版不再检查循环引用，直接递归求值依赖项
+  (void)fangwen_zhong;
 
   // 计算公式
   FormulaEvalResult jieguo = evaluate_formula(gongzuobu, danyuange.yuanshi, fangwen_zhong,
                                               yiwancheng);
 
-  // 从访问栈弹出
-  remove_id(fangwen_zhong, danyuange_id);
   // 标记为已完成
   yiwancheng.push_back(danyuange_id);
 

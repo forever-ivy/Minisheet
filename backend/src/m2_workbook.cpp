@@ -1,6 +1,10 @@
 // ========================================
 // 工作簿核心实现文件
 // 实现Workbook的各种操作：设置单元格、获取单元格等
+// 这个文件不直接面对用户输入输出，而是给上层模块提供统一的数据操作接口：
+// - CLI / Server / m6_storage 最终都会通过这里改 Workbook
+// - 真正的显示刷新委托给 m3
+// - 真正的公式重算委托给 m5
 // ========================================
 
 #include "minisheet/m2_workbook.h"
@@ -55,7 +59,9 @@ void set_cell(Workbook& gongzuobu, const string& danyuange_id, const string& yua
   danyuange_jilu.biaoshi = guifanhou_id;  // 标识
   danyuange_jilu.yuanshi = yuanshi;       // 原始输入内容
 
-  // 刷新显示值（根据内容类型决定显示什么）
+  // 这里只刷新“字面值”状态：
+  // - 纯数字 / 字符串会立刻得到显示值
+  // - 公式只会被标记成 Formula，真正计算要等外层调用 recalculate_all
   refresh_literal_cell(danyuange_jilu);
 }
 
@@ -115,12 +121,13 @@ unordered_map<string, CellRecord>& mutable_cells(Workbook& gongzuobu) {
 
 // 重新计算所有公式
 void recalculate_all(Workbook& gongzuobu) {
-  // 调用recalc模块的函数
+  // m2 自己不实现重算逻辑，而是把调度工作交给 m5
+  // 这样 app 层只需要记住“改完数据后调 recalculate_all”这一层接口
   recalculate_all_cells(gongzuobu);
 }
 
 // 从某个单元格开始重新计算
 void recalculate_from(Workbook& gongzuobu, const string& danyuange_id) {
-  // 调用recalc模块的函数
+  // 目前虽然名字叫“从某个单元格开始”，但实现仍然委托给 m5 的简化版全量重算
   recalculate_impacted_cells(gongzuobu, danyuange_id);
 }
