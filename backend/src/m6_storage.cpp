@@ -1,6 +1,9 @@
 // ========================================
 // 文件存储实现文件
 // 支持两种格式：CSV（文本，兼容Excel）和DAT（二进制，我们的私有格式）
+// 它位于“文件世界”和“Workbook 内存世界”之间：
+// - 负责把磁盘格式翻译成 Workbook
+// - 但不自己计算公式，加载完成后会回到 m2::recalculate_all 触发重算
 // ========================================
 
 #include "minisheet/m6_storage.h"
@@ -126,7 +129,8 @@ Workbook load_csv(const string& lujing) {
     // 更新最大列数
     zui_da_lie = max(zui_da_lie, static_cast<int>(zhiduan_men.size()));
 
-    // 把每个非空字段写入对应的单元格
+    // 把每个非空字段写入对应的单元格。
+    // 注意这里只是逐格调用 m2::set_cell 写入原始内容，还没有真正做公式依赖计算。
     for (size_t lie = 0; lie < zhiduan_men.size() && lie < static_cast<size_t>(kMaxColumns); ++lie) {
       if (!zhiduan_men[lie].empty()) {
         // 列号要+1，因为CSV的列是从0开始，但我们的单元格ID从1开始
@@ -145,7 +149,8 @@ Workbook load_csv(const string& lujing) {
   gongzuobu.yuan_csv_hang_shu = min(hang - 1, kMaxRows);
   gongzuobu.yuan_csv_lie_shu = min(zui_da_lie, kMaxColumns);
 
-  // 重新计算所有公式
+  // 文件内容全部写入后，统一触发一次完整重算。
+  // 这会进入 m2 -> m5 -> m4，把 CSV 中出现的公式都算出来。
   recalculate_all(gongzuobu);
   return gongzuobu;
 }
