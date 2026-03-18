@@ -461,12 +461,18 @@ bool evaluate_cell_numeric(Workbook& gongzuobu,
     return true;
   }
 
-  // 当前简化版不再检查循环引用，直接递归求值依赖项
-  (void)fangwen_zhong;
+  // 如果当前单元格已经在访问栈里，说明出现了循环引用
+  if (contains_id(fangwen_zhong, danyuange_id)) {
+    set_formula_error(danyuange);
+    return false;
+  }
+
+  fangwen_zhong.push_back(danyuange_id);
 
   // 计算公式
   FormulaEvalResult jieguo = evaluate_formula(gongzuobu, danyuange.yuanshi, fangwen_zhong,
                                               yiwancheng);
+  fangwen_zhong.pop_back();
 
   // 标记为已完成
   yiwancheng.push_back(danyuange_id);

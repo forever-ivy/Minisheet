@@ -1,1 +1,0 @@
-/opt/homebrew/bin/g++-15  -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/minisheet_cli.dir/app/minisheet_cli.cpp.o -o minisheet_cli  libminisheet_core.a

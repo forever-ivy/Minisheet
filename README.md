@@ -26,7 +26,7 @@
 - `electron/`: Electron 桌面壳、打包脚本与运行时桥接
 - `examples/`: 演示用 CSV 样例
 - `scripts/`: 启动和演示脚本
-- `vendor/`: 第三方头文件
+- `backend/vendor/`: 后端使用的第三方头文件
 
 ## 启动后端
 
@@ -42,21 +42,22 @@ cmake --build backend/build
 bash scripts/start_demo.sh
 ```
 
-## CLI 命令
+## OJ 验收 CLI
 
 ```bash
-./backend/build/minisheet_cli import examples/basic-demo.csv
-./backend/build/minisheet_cli save examples/basic-demo.csv /tmp/minisheet.dat
-./backend/build/minisheet_cli load /tmp/minisheet.dat
-./backend/build/minisheet_cli pack examples/basic-demo.csv /tmp/minisheet.dat
-./backend/build/minisheet_cli unpack /tmp/minisheet.dat /tmp/minisheet.csv
+cmake -S backend -B backend/build
+cmake --build backend/build --target myxls
+./backend/build/myxls < input.txt
 ```
 
-## 老师验收建议流程
+这个入口专门用于 PTA `7-4 SimpleGrid复杂公式` 验收：
 
-1. 用 CLI 导入测试 CSV
-2. 保存 DAT 并重新加载 DAT
-3. 再打开前端页面做表格编辑和公式演示
+- 从标准输入读取 `m n` 与后续 `m` 行逗号分隔单元格
+- 支持数字、空白、`=公式`、`+ - * /`、括号、`sin/cos/sqrt`、`A1-Z100` 引用
+- 输出固定两位小数，每个单元格后保留一个空格
+- 错误公式、越界引用、循环引用统一输出 `0.00`
+
+Windows 验收机上的目标产物是 `myxls.exe`。构建后把它放到 `D:\testxls\myxls.exe`，再运行老师提供的 `TestGrid.exe` 即可。
 
 ## Electron 桌面版
 

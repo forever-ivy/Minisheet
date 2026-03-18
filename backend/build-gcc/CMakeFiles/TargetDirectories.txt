@@ -1,6 +1,0 @@
-/Users/Code/Minisheet/backend/build-gcc/CMakeFiles/minisheet_core.dir
-/Users/Code/Minisheet/backend/build-gcc/CMakeFiles/minisheet_cli.dir
-/Users/Code/Minisheet/backend/build-gcc/CMakeFiles/minisheet_server.dir
-/Users/Code/Minisheet/backend/build-gcc/CMakeFiles/minisheet_storage_roundtrip_test.dir
-/Users/Code/Minisheet/backend/build-gcc/CMakeFiles/edit_cache.dir
-/Users/Code/Minisheet/backend/build-gcc/CMakeFiles/rebuild_cache.dir
