@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 
 project(minisheet LANGUAGES CXX C)
 
+enable_testing()
+
 # 所有目标统一使用固定的语言标准。
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,3 +52,12 @@ target_link_libraries(minisheet_server PRIVATE minisheet_core)
 if (WIN32)
   target_link_libraries(minisheet_server PRIVATE ws2_32)
 endif()
+
+add_executable(backend_error_messages_test
+  tests/error_messages_test.cpp
+  src/m6_storage.cpp
+)
+
+target_link_libraries(backend_error_messages_test PRIVATE minisheet_core)
+
+add_test(NAME backend_error_messages_test COMMAND backend_error_messages_test)

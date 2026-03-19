@@ -7,11 +7,13 @@
 
 #include "../third_party/tinyexpr/tinyexpr.h"  // 第三方表达式计算库
 
-#include <cctype>    // 字符处理函数
-#include <cmath>     // 数学函数
-#include <vector>   // 用vector存访问栈
+#include <cctype>    
+#include <cmath>     
+#include <vector>  
 
 using namespace std;
+
+namespace {
 
 // 把字符串转成大写
 // 用来统一单元格ID的大小写，比如"a1"变成"A1"
@@ -46,9 +48,25 @@ bool is_identifier_char(char zifu) {
   return isalnum(static_cast<unsigned char>(zifu)) || zifu == '_';
 }
 
+
+int text_length(const string& wenben) {
+  return static_cast<int>(wenben.size());
+}
+
+// 在字符串里查找某个字符，找到返回位置，没找到返回-1
+int find_char(const string& wenben, char mubiao) {
+  for (int xiabiao = 0; xiabiao < text_length(wenben); ++xiabiao) {
+    if (wenben[xiabiao] == mubiao) {
+      return xiabiao;
+    }
+  }
+  return -1;
+}
+
 // 跳过字符串中的空白字符，返回下一个非空白字符的位置
-size_t skip_spaces(const string& wenben, size_t qidian) {
-  while (qidian < wenben.size() && isspace(static_cast<unsigned char>(wenben[qidian]))) {
+int skip_spaces(const string& wenben, int qidian) {
+  while (qidian < text_length(wenben) &&
+         isspace(static_cast<unsigned char>(wenben[qidian]))) {
     qidian += 1;
   }
   return qidian;
@@ -60,8 +78,8 @@ bool parse_range_ref(const string& wenben, CellRange& fanwei) {
   string houxuan = trim(wenben);
 
   // 找冒号
-  size_t maohao = houxuan.find(':');
-  if (maohao == string::npos) {
+  int maohao = find_char(houxuan, ':');
+  if (maohao < 0) {
     return false;  // 没有冒号，不是范围
   }
 
@@ -83,10 +101,12 @@ bool parse_range_ref(const string& wenben, CellRange& fanwei) {
 // 从kai_kuohao_xiabiao（左括号位置）开始找对应的右括号
 // 要考虑嵌套，比如 (1+(2+3)) 要找第二个右括号
 // 找到返回true，bi_kuohao_xiabiao得到右括号位置
-bool find_matching_paren(const string& wenben, size_t kai_kuohao_xiabiao, size_t& bi_kuohao_xiabiao) {
+bool find_matching_paren(const string& wenben,
+                         int kai_kuohao_xiabiao,
+                         int& bi_kuohao_xiabiao) {
   int shendu = 0;  // 深度计数器
 
-  for (size_t xiabiao = kai_kuohao_xiabiao; xiabiao < wenben.size(); ++xiabiao) {
+  for (int xiabiao = kai_kuohao_xiabiao; xiabiao < text_length(wenben); ++xiabiao) {
     if (wenben[xiabiao] == '(') {
       shendu += 1;  // 遇到左括号，深度加1
     } else if (wenben[xiabiao] == ')') {
@@ -124,12 +144,27 @@ void set_formula_error(CellRecord& danyuange) {
   danyuange.shuzhi = 0.0;       // 数值归零
 }
 
-// 预声明，因为rewrite_expression和evaluate_plain_expression互相调用
+// 预声明，因为几个递归函数会互相调用
 bool evaluate_plain_expression(Workbook& gongzuobu,
                                const string& biaodashi,
                                vector<string>& fangwen_zhong,
                                vector<string>& yiwancheng,
                                double& shuzhi);
+bool evaluate_range_numeric(Workbook& gongzuobu,
+                            const CellRange& fanwei,
+                            bool shi_pingjun,
+                            vector<string>& fangwen_zhong,
+                            vector<string>& yiwancheng,
+                            double& shuzhi);
+FormulaEvalResult evaluate_formula(Workbook& gongzuobu,
+                                   const string& gongshi,
+                                   vector<string>& fangwen_zhong,
+                                   vector<string>& yiwancheng);
+bool evaluate_cell_numeric(Workbook& gongzuobu,
+                           const string& danyuange_id,
+                           vector<string>& fangwen_zhong,
+                           vector<string>& yiwancheng,
+                           double& shuzhi);
 
 // 改写表达式
 // 把公式中的单元格引用替换成数值，函数调用（如SUM）也计算掉
@@ -142,7 +177,7 @@ bool rewrite_expression(Workbook& gongzuobu,
   shuchu.clear();  // 清空输出
 
   // 遍历输入字符串
-  for (size_t xiabiao = 0; xiabiao < shuru.size();) {
+  for (int xiabiao = 0; xiabiao < text_length(shuru);) {
     // 如果不是字母，直接复制到输出
     if (!isalpha(static_cast<unsigned char>(shuru[xiabiao]))) {
       shuchu.push_back(shuru[xiabiao]);
@@ -151,8 +186,8 @@ bool rewrite_expression(Workbook& gongzuobu,
     }
 
     // 是字母，开始读取标识符（字母、数字、下划线）
-    size_t qidian = xiabiao;
-    while (xiabiao < shuru.size() && is_identifier_char(shuru[xiabiao])) {
+    int qidian = xiabiao;
+    while (xiabiao < text_length(shuru) && is_identifier_char(shuru[xiabiao])) {
       xiabiao += 1;
     }
 
@@ -160,10 +195,10 @@ bool rewrite_expression(Workbook& gongzuobu,
     string biaoshifu = shuru.substr(qidian, xiabiao - qidian);
 
     // 跳过空白，看后面是不是左括号
-    size_t houkan_xiabiao = skip_spaces(shuru, xiabiao);
-    if (houkan_xiabiao < shuru.size() && shuru[houkan_xiabiao] == '(') {
+    int houkan_xiabiao = skip_spaces(shuru, xiabiao);
+    if (houkan_xiabiao < text_length(shuru) && shuru[houkan_xiabiao] == '(') {
       // 是函数调用！
-      size_t bi_kuohao_xiabiao = 0;
+      int bi_kuohao_xiabiao = 0;
       // 找匹配的右括号
       if (!find_matching_paren(shuru, houkan_xiabiao, bi_kuohao_xiabiao)) {
         return false;  // 括号不匹配
@@ -233,21 +268,21 @@ bool evaluate_plain_expression(Workbook& gongzuobu,
                                double& shuzhi) {
   // 第一遍扫描：找出所有单元格ID
   vector<string> mingcheng_men;
-  for (size_t xiabiao = 0; xiabiao < biaodashi.size();) {
+  for (int xiabiao = 0; xiabiao < text_length(biaodashi);) {
     if (!isalpha(static_cast<unsigned char>(biaodashi[xiabiao]))) {
       xiabiao += 1;
       continue;
     }
 
-    size_t qidian = xiabiao;
-    while (xiabiao < biaodashi.size() && is_identifier_char(biaodashi[xiabiao])) {
+    int qidian = xiabiao;
+    while (xiabiao < text_length(biaodashi) && is_identifier_char(biaodashi[xiabiao])) {
       xiabiao += 1;
     }
 
     string biaoshifu = biaodashi.substr(qidian, xiabiao - qidian);
-    size_t houkan_xiabiao = skip_spaces(biaodashi, xiabiao);
+    int houkan_xiabiao = skip_spaces(biaodashi, xiabiao);
     // 如果后面跟着左括号，是函数调用，跳过
-    if (houkan_xiabiao < biaodashi.size() && biaodashi[houkan_xiabiao] == '(') {
+    if (houkan_xiabiao < text_length(biaodashi) && biaodashi[houkan_xiabiao] == '(') {
       continue;
     }
     // 如果不是单元格ID，跳过
@@ -279,7 +314,7 @@ bool evaluate_plain_expression(Workbook& gongzuobu,
   }
 
   // 创建tinyexpr的变量绑定
-  for (size_t xiabiao = 0; xiabiao < mingcheng_men.size(); ++xiabiao) {
+  for (int xiabiao = 0; xiabiao < static_cast<int>(mingcheng_men.size()); ++xiabiao) {
     bianliang_men.push_back(
         {mingcheng_men[xiabiao].c_str(), &zhi_men[xiabiao], TE_VARIABLE, nullptr});
   }
@@ -470,8 +505,8 @@ bool evaluate_cell_numeric(Workbook& gongzuobu,
   fangwen_zhong.push_back(danyuange_id);
 
   // 计算公式
-  FormulaEvalResult jieguo = evaluate_formula(gongzuobu, danyuange.yuanshi, fangwen_zhong,
-                                              yiwancheng);
+  FormulaEvalResult jieguo =
+      evaluate_formula(gongzuobu, danyuange.yuanshi, fangwen_zhong, yiwancheng);
   fangwen_zhong.pop_back();
 
   // 标记为已完成
@@ -491,4 +526,31 @@ bool evaluate_cell_numeric(Workbook& gongzuobu,
 
   shuzhi = jieguo.shuzhi;
   return true;
+}
+
+}  // namespace
+
+bool evaluate_range_numeric(Workbook& gongzuobu,
+                            const CellRange& fanwei,
+                            bool shi_pingjun,
+                            vector<string>& yiwancheng,
+                            double& shuzhi) {
+  vector<string> fangwen_zhong;
+  return evaluate_range_numeric(gongzuobu, fanwei, shi_pingjun, fangwen_zhong, yiwancheng,
+                                shuzhi);
+}
+
+FormulaEvalResult evaluate_formula(Workbook& gongzuobu,
+                                   const string& gongshi,
+                                   vector<string>& yiwancheng) {
+  vector<string> fangwen_zhong;
+  return evaluate_formula(gongzuobu, gongshi, fangwen_zhong, yiwancheng);
+}
+
+bool evaluate_cell_numeric(Workbook& gongzuobu,
+                           const string& danyuange_id,
+                           vector<string>& yiwancheng,
+                           double& shuzhi) {
+  vector<string> fangwen_zhong;
+  return evaluate_cell_numeric(gongzuobu, danyuange_id, fangwen_zhong, yiwancheng, shuzhi);
 }

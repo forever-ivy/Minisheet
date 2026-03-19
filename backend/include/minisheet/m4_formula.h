@@ -30,13 +30,11 @@ struct FormulaEvalResult
 // 如果单元格是数字类型，直接返回值
 // 如果单元格是公式类型，递归计算公式
 // 这是 m4 对外最核心的入口，m5 扫描到公式单元格时最终就是调它
-// fangwen_zhong: 为了兼容调用接口保留下来的递归上下文，当前简化版不使用
-// yiwancheng: 已经计算完成的单元格列表
+// yiwancheng: 已经计算完成的单元格列表，用于避免重复计算
 // shuzhi: 输出的数值
 // 返回值true表示成功，false表示失败（公式错误、字符串参与数值计算等）
 bool evaluate_cell_numeric(Workbook &gongzuobu,
                            const string &danyuange_id,
-                           vector<string> &fangwen_zhong,
                            vector<string> &yiwancheng,
                            double &shuzhi);
 
@@ -48,7 +46,6 @@ bool evaluate_cell_numeric(Workbook &gongzuobu,
 bool evaluate_range_numeric(Workbook &gongzuobu,
                             const CellRange &fanwei,
                             bool shi_pingjun,
-                            vector<string> &fangwen_zhong,
                             vector<string> &yiwancheng,
                             double &shuzhi);
 
@@ -58,5 +55,4 @@ bool evaluate_range_numeric(Workbook &gongzuobu,
 // 这是“字符串公式 -> 数值结果”的入口，通常由 evaluate_cell_numeric 在内部调用
 FormulaEvalResult evaluate_formula(Workbook &gongzuobu,
                                    const string &gongshi,
-                                   vector<string> &fangwen_zhong,
                                    vector<string> &yiwancheng);

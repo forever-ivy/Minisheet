@@ -53,7 +53,7 @@ template <typename T>
 T read_value(const vector<char>& zijie_men, size_t& pianyi) {
   // 检查是否有足够的字节
   if (pianyi + sizeof(T) > zijie_men.size()) {
-    throw runtime_error("corrupt dat file");
+    throw runtime_error("DAT文件已损坏");
   }
 
   T zhi {};  // 零初始化
@@ -113,7 +113,7 @@ vector<string> parse_csv_row(const string& yi_hang) {
 Workbook load_csv(const string& lujing) {
   ifstream shuru(lujing);
   if (!shuru) {
-    throw runtime_error("failed to open csv");
+    throw runtime_error("打开CSV文件失败");
   }
 
   Workbook gongzuobu;
@@ -207,7 +207,7 @@ pair<int, int> workbook_shape(const Workbook& gongzuobu) {
 void save_csv(const string& lujing, const Workbook& gongzuobu) {
   ofstream shuchu(lujing, ios::binary);
   if (!shuchu) {
-    throw runtime_error("failed to open csv for writing");
+    throw runtime_error("打开CSV文件写入失败");
   }
 
   // 获取工作簿尺寸
@@ -273,12 +273,12 @@ vector<char> serialize_workbook(const Workbook& gongzuobu) {
 Workbook deserialize_workbook(const vector<char>& zijie_men) {
   // 检查文件大小（至少要能放下魔数和版本号）
   if (zijie_men.size() < 12) {
-    throw runtime_error("dat file too small");
+    throw runtime_error("DAT文件过小");
   }
 
   // 检查魔数
   if (!equal(zijie_men.begin(), zijie_men.begin() + 4, kMagic)) {
-    throw runtime_error("invalid dat header");
+    throw runtime_error("DAT文件头无效");
   }
 
   size_t pianyi = 4;  // 从魔数后面开始读
@@ -286,7 +286,7 @@ Workbook deserialize_workbook(const vector<char>& zijie_men) {
   // 读版本号
   uint32_t banben = read_value<uint32_t>(zijie_men, pianyi);
   if (banben != 1 && banben != kVersion) {
-    throw runtime_error("unsupported dat version");
+    throw runtime_error("不支持的DAT文件版本");
   }
 
   Workbook gongzuobu;
@@ -309,7 +309,7 @@ Workbook deserialize_workbook(const vector<char>& zijie_men) {
 
     // 检查长度是否合法
     if (pianyi + yuanshi_changdu > zijie_men.size()) {
-      throw runtime_error("corrupt dat record");
+      throw runtime_error("DAT记录已损坏");
     }
 
     // 读取原始内容
@@ -335,7 +335,7 @@ void save_dat(const string& lujing, const Workbook& gongzuobu) {
   // 写入文件
   ofstream shuchu(lujing, ios::binary);
   if (!shuchu) {
-    throw runtime_error("failed to open dat for writing");
+    throw runtime_error("打开DAT文件写入失败");
   }
   shuchu.write(zijie_men.data(), static_cast<streamsize>(zijie_men.size()));
 }
@@ -345,7 +345,7 @@ Workbook load_dat(const string& lujing) {
   // 打开文件
   ifstream shuru(lujing, ios::binary);
   if (!shuru) {
-    throw runtime_error("failed to open dat for reading");
+    throw runtime_error("打开DAT文件读取失败");
   }
 
   // 读取全部内容到vector

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, Menu, dialog } = require('electron');
 const { spawn } = require('child_process');
 const http = require('http');
 const net = require('net');
@@ -6,6 +6,9 @@ const path = require('path');
 const {
   getRuntimeIconPath,
 } = require('./scripts/icon-assets.cjs');
+const {
+  buildAppMenuTemplate,
+} = require('./scripts/app-menu.cjs');
 
 let backendProcess = null;
 let mainWindow = null;
@@ -197,6 +200,9 @@ app.on('before-quit', () => {
 
 app.whenReady()
   .then(async () => {
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate(buildAppMenuTemplate(process.platform, app.name)),
+    );
     const apiBase = await startBackend();
     await createMainWindow(apiBase);
   })

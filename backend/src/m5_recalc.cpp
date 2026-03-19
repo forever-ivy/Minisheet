@@ -28,7 +28,6 @@ void recalculate_all_cells(Workbook& gongzuobu) {
   // 第二步：计算所有公式单元格
   // 这里自己不解析公式，而是逐个把入口交给 m4::evaluate_cell_numeric。
   // m4 内部会继续递归访问被引用的单元格。
-  vector<string> fangwen_zhong;  // 当前简化版不使用，保留接口兼容
   vector<string> yiwancheng;    // 已完成的单元格列表
 
   for (const auto& xiang : cells(gongzuobu)) {
@@ -36,7 +35,7 @@ void recalculate_all_cells(Workbook& gongzuobu) {
       double shuzhi = 0.0;
       // 从“这个公式单元格”出发向下展开依赖图。
       // 如果它依赖 A1/B1，m4 会继续递归进去；m5 只负责把这个入口触发起来。
-      (void)evaluate_cell_numeric(gongzuobu, xiang.first, fangwen_zhong, yiwancheng, shuzhi);
+      (void)evaluate_cell_numeric(gongzuobu, xiang.first, yiwancheng, shuzhi);
       // 注意：这里即使计算失败也不中断，继续算其他的
       // 失败的单元格会在evaluate_cell_numeric里被标记为#NA
     }

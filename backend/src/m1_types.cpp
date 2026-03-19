@@ -24,7 +24,7 @@ using namespace std;
 string column_index_to_name(int yiji_lie) {
   // 先检查一下范围对不对
   if (yiji_lie < 1 || yiji_lie > kMaxColumns) {
-    throw invalid_argument("column out of range");
+    throw invalid_argument("列号超出范围");
   }
 
   string lie_ming;      // 存结果的字符串
@@ -48,7 +48,7 @@ string column_index_to_name(int yiji_lie) {
 int column_name_to_index(const string& lie_ming) {
   // 空字符串不行
   if (lie_ming.empty()) {
-    throw invalid_argument("empty column name");
+    throw invalid_argument("列名不能为空");
   }
 
   int lie_zhi = 0;
@@ -56,7 +56,7 @@ int column_name_to_index(const string& lie_ming) {
   for (char zifu : lie_ming) {
     // 必须是字母
     if (!isalpha(static_cast<unsigned char>(zifu))) {
-      throw invalid_argument("invalid column name");
+      throw invalid_argument("列名不合法");
     }
     // 26进制转换：前面累积的乘以26，加上当前位的值
     // 这里用toupper确保大小写都能处理，A=1, B=2, ...
@@ -65,7 +65,7 @@ int column_name_to_index(const string& lie_ming) {
 
   // 检查范围
   if (lie_zhi < 1 || lie_zhi > kMaxColumns) {
-    throw invalid_argument("column out of range");
+    throw invalid_argument("列号超出范围");
   }
   return lie_zhi;
 }
@@ -87,13 +87,13 @@ CellCoord parse_cell_id(const string& danyuange_id) {
     }
     // 其他字符都是非法的
     else {
-      throw invalid_argument("invalid cell id");
+      throw invalid_argument("单元格ID不合法");
     }
   }
 
   // 列名和行号都不能为空
   if (lie_ming.empty() || hang_haoma.empty()) {
-    throw invalid_argument("invalid cell id");
+    throw invalid_argument("单元格ID不合法");
   }
 
   // 组装坐标结构体
@@ -101,7 +101,7 @@ CellCoord parse_cell_id(const string& danyuange_id) {
 
   // 检查坐标是否在合法范围内
   if (!is_valid_coord(zuobiao)) {
-    throw invalid_argument("cell id out of range");
+    throw invalid_argument("单元格ID超出范围");
   }
   return zuobiao;
 }
@@ -110,7 +110,7 @@ CellCoord parse_cell_id(const string& danyuange_id) {
 string to_cell_id(const CellCoord& zuobiao) {
   // 先检查坐标是否合法
   if (!is_valid_coord(zuobiao)) {
-    throw invalid_argument("coord out of range");
+    throw invalid_argument("单元格坐标超出范围");
   }
   // 列名+行号，比如A1
   return column_index_to_name(zuobiao.lie) + to_string(zuobiao.hang);
@@ -209,7 +209,7 @@ string read_text_file(const string& lujing) {
   // 用二进制模式打开，这样不会转换换行符
   ifstream shuru(lujing, ios::binary);
   if (!shuru) {
-    throw runtime_error("failed to open file for reading");
+    throw runtime_error("打开文件读取失败");
   }
 
   // 用ostringstream一次性读取全部内容
@@ -230,7 +230,7 @@ void write_text_file(const string& lujing, const string& neirong) {
   // 打开文件写入
   ofstream shuchu(lujing, ios::binary);
   if (!shuchu) {
-    throw runtime_error("failed to open file for writing");
+    throw runtime_error("打开文件写入失败");
   }
   shuchu << neirong;
 }
