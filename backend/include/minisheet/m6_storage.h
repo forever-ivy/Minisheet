@@ -3,7 +3,7 @@
 // ========================================
 // 文件存储模块
 // 负责把电子表格保存到文件或从文件加载
-// 支持CSV格式（文本，兼容Excel）和DAT格式（二进制，我们自己的格式）
+// 支持CSV格式（文本，兼容Excel）和DAT格式（二进制，我们自己的压缩格式）
 // 它是典型的“边界模块”：
 // - 上游：CLI 和 Server 都会直接调用它
 // - 下游：加载时会调用 m2::set_cell 把数据写入 Workbook，
@@ -31,7 +31,7 @@ void save_csv(const string& lujing, const Workbook& gongzuobu);
 
 // 把工作簿序列化成字节数组
 // 这是DAT格式的内部表示，用于网络传输或保存二进制文件
-// 格式：魔数(4字节) + 版本号(4字节) + 元数据 + 单元格数据
+// 当前格式是版本3：魔数(4字节) + 版本号(4字节) + 原始长度(4字节) + zlib压缩数据体
 vector<char> serialize_workbook(const Workbook& gongzuobu);
 
 // 从字节数组反序列化工作簿

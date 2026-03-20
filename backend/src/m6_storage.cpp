@@ -15,6 +15,7 @@
 #include <cstring>    // memcpy
 #include <fstream>    // 文件流
 #include <iterator>   // istreambuf_iterator
+#include <miniz.h>    // 内置zlib兼容压缩实现
 #include <stdexcept>  // 异常
 
 using namespace std;
@@ -24,9 +25,8 @@ using namespace std;
 constexpr char kMagic[4] = {'M', 'S', 'H', 'T'};
 
 // DAT文件版本号
-// 版本1：只有单元格数据
-// 版本2：增加了CSV行列数信息
-constexpr uint32_t kVersion = 2;
+// 版本3：文件头后面存的是 zlib 压缩后的工作簿数据体
+constexpr uint32_t kVersion = 3;
 
 // 模板函数：把任意类型追加到字节数组
 // 用于序列化，直接把内存里的二进制数据拷进去
@@ -60,6 +60,98 @@ T read_value(const vector<char>& zijie_men, size_t& pianyi) {
   memcpy(&zhi, zijie_men.data() + pianyi, sizeof(T));
   pianyi += sizeof(T);  // 偏移量增加
   return zhi;
+}
+
+vector<char> compress_bytes(const vector<char>& yuanshi) {
+  uLongf mubiao_changdu = compressBound(static_cast<uLong>(yuanshi.size()));
+  vector<char> yasuohou(mubiao_changdu);
+
+  int jieguo = compress2(reinterpret_cast<Bytef*>(yasuohou.data()),
+                         &mubiao_changdu,
+                         reinterpret_cast<const Bytef*>(yuanshi.data()),
+                         static_cast<uLong>(yuanshi.size()),
+                         Z_BEST_COMPRESSION);
+  if (jieguo != Z_OK) {
+    throw runtime_error("DAT压缩失败");
+  }
+
+  yasuohou.resize(static_cast<size_t>(mubiao_changdu));
+  return yasuohou;
+}
+
+vector<char> decompress_bytes(const vector<char>& yasuohou, uint32_t yuanshi_changdu) {
+  vector<char> jieyahou(yuanshi_changdu);
+  uLongf mubiao_changdu = static_cast<uLongf>(jieyahou.size());
+
+  int jieguo = uncompress(reinterpret_cast<Bytef*>(jieyahou.data()),
+                          &mubiao_changdu,
+                          reinterpret_cast<const Bytef*>(yasuohou.data()),
+                          static_cast<uLong>(yasuohou.size()));
+  if (jieguo != Z_OK || mubiao_changdu != static_cast<uLongf>(yuanshi_changdu)) {
+    throw runtime_error("DAT压缩数据已损坏");
+  }
+
+  return jieyahou;
+}
+
+vector<char> serialize_workbook_payload(const Workbook& gongzuobu) {
+  vector<char> zijie_men;
+
+  // 写原始CSV行列数（各4字节）
+  append_value<uint32_t>(zijie_men, static_cast<uint32_t>(max(gongzuobu.yuan_csv_hang_shu, 0)));
+  append_value<uint32_t>(zijie_men, static_cast<uint32_t>(max(gongzuobu.yuan_csv_lie_shu, 0)));
+
+  // 写单元格数量（4字节）
+  vector<string> id_men = ordered_cell_ids(gongzuobu);
+  append_value<uint32_t>(zijie_men, static_cast<uint32_t>(id_men.size()));
+
+  // 逐个写单元格
+  for (const string& danyuange_id : id_men) {
+    const CellRecord& danyuange = cell(gongzuobu, danyuange_id);
+    CellCoord zuobiao = parse_cell_id(danyuange_id);
+
+    append_value<uint16_t>(zijie_men, static_cast<uint16_t>(zuobiao.hang));
+    append_value<uint16_t>(zijie_men, static_cast<uint16_t>(zuobiao.lie));
+    append_value<uint8_t>(zijie_men, static_cast<uint8_t>(danyuange.leixing));
+    append_value<uint32_t>(zijie_men, static_cast<uint32_t>(danyuange.yuanshi.size()));
+    zijie_men.insert(zijie_men.end(), danyuange.yuanshi.begin(), danyuange.yuanshi.end());
+  }
+
+  return zijie_men;
+}
+
+Workbook deserialize_workbook_payload(const vector<char>& zijie_men) {
+  size_t pianyi = 0;
+  Workbook gongzuobu;
+
+  gongzuobu.yuan_csv_hang_shu = static_cast<int>(read_value<uint32_t>(zijie_men, pianyi));
+  gongzuobu.yuan_csv_lie_shu = static_cast<int>(read_value<uint32_t>(zijie_men, pianyi));
+
+  uint32_t ge_shu = read_value<uint32_t>(zijie_men, pianyi);
+
+  for (uint32_t xuhao = 0; xuhao < ge_shu; ++xuhao) {
+    uint16_t hang = read_value<uint16_t>(zijie_men, pianyi);
+    uint16_t lie = read_value<uint16_t>(zijie_men, pianyi);
+    uint8_t leixing = read_value<uint8_t>(zijie_men, pianyi);
+    uint32_t yuanshi_changdu = read_value<uint32_t>(zijie_men, pianyi);
+
+    if (pianyi + yuanshi_changdu > zijie_men.size()) {
+      throw runtime_error("DAT记录已损坏");
+    }
+
+    string yuanshi(zijie_men.data() + pianyi, zijie_men.data() + pianyi + yuanshi_changdu);
+    pianyi += yuanshi_changdu;
+
+    (void)leixing;
+    set_cell(gongzuobu, to_cell_id({static_cast<int>(hang), static_cast<int>(lie)}), yuanshi);
+  }
+
+  if (pianyi != zijie_men.size()) {
+    throw runtime_error("DAT记录已损坏");
+  }
+
+  recalculate_all(gongzuobu);
+  return gongzuobu;
 }
 
 // 解析CSV的一行
@@ -233,45 +325,21 @@ void save_csv(const string& lujing, const Workbook& gongzuobu) {
 
 // 把工作簿序列化成字节数组（DAT格式）
 vector<char> serialize_workbook(const Workbook& gongzuobu) {
+  vector<char> shuju_ti = serialize_workbook_payload(gongzuobu);
+  vector<char> yasuohou = compress_bytes(shuju_ti);
   vector<char> zijie_men;
 
-  // 1. 写魔数（4字节）
   zijie_men.insert(zijie_men.end(), kMagic, kMagic + 4);
-
-  // 2. 写版本号（4字节）
   append_value<uint32_t>(zijie_men, kVersion);
-
-  // 3. 写原始CSV行列数（各4字节）
-  append_value<uint32_t>(zijie_men, static_cast<uint32_t>(max(gongzuobu.yuan_csv_hang_shu, 0)));
-  append_value<uint32_t>(zijie_men, static_cast<uint32_t>(max(gongzuobu.yuan_csv_lie_shu, 0)));
-
-  // 4. 写单元格数量（4字节）
-  vector<string> id_men = ordered_cell_ids(gongzuobu);
-  append_value<uint32_t>(zijie_men, static_cast<uint32_t>(id_men.size()));
-
-  // 5. 逐个写单元格
-  for (const string& danyuange_id : id_men) {
-    const CellRecord& danyuange = cell(gongzuobu, danyuange_id);
-    CellCoord zuobiao = parse_cell_id(danyuange_id);
-
-    // 写行号（2字节，uint16_t足够存32767）
-    append_value<uint16_t>(zijie_men, static_cast<uint16_t>(zuobiao.hang));
-    // 写列号（2字节）
-    append_value<uint16_t>(zijie_men, static_cast<uint16_t>(zuobiao.lie));
-    // 写类型（1字节）
-    append_value<uint8_t>(zijie_men, static_cast<uint8_t>(danyuange.leixing));
-    // 写原始内容长度（4字节）
-    append_value<uint32_t>(zijie_men, static_cast<uint32_t>(danyuange.yuanshi.size()));
-    // 写原始内容（变长）
-    zijie_men.insert(zijie_men.end(), danyuange.yuanshi.begin(), danyuange.yuanshi.end());
-  }
+  append_value<uint32_t>(zijie_men, static_cast<uint32_t>(shuju_ti.size()));
+  zijie_men.insert(zijie_men.end(), yasuohou.begin(), yasuohou.end());
 
   return zijie_men;
 }
 
 // 从字节数组反序列化工作簿
 Workbook deserialize_workbook(const vector<char>& zijie_men) {
-  // 检查文件大小（至少要能放下魔数和版本号）
+  // 检查文件大小（至少要能放下魔数、版本号和未压缩长度）
   if (zijie_men.size() < 12) {
     throw runtime_error("DAT文件过小");
   }
@@ -285,46 +353,15 @@ Workbook deserialize_workbook(const vector<char>& zijie_men) {
 
   // 读版本号
   uint32_t banben = read_value<uint32_t>(zijie_men, pianyi);
-  if (banben != 1 && banben != kVersion) {
+  if (banben != kVersion) {
     throw runtime_error("不支持的DAT文件版本");
   }
 
-  Workbook gongzuobu;
+  uint32_t yuanshi_changdu = read_value<uint32_t>(zijie_men, pianyi);
+  vector<char> yasuohou(zijie_men.begin() + static_cast<ptrdiff_t>(pianyi), zijie_men.end());
+  vector<char> jieyahou = decompress_bytes(yasuohou, yuanshi_changdu);
 
-  // 版本2以上才有CSV行列数
-  if (banben >= 2) {
-    gongzuobu.yuan_csv_hang_shu = static_cast<int>(read_value<uint32_t>(zijie_men, pianyi));
-    gongzuobu.yuan_csv_lie_shu = static_cast<int>(read_value<uint32_t>(zijie_men, pianyi));
-  }
-
-  // 读单元格数量
-  uint32_t ge_shu = read_value<uint32_t>(zijie_men, pianyi);
-
-  // 逐个读单元格
-  for (uint32_t xuhao = 0; xuhao < ge_shu; ++xuhao) {
-    uint16_t hang = read_value<uint16_t>(zijie_men, pianyi);
-    uint16_t lie = read_value<uint16_t>(zijie_men, pianyi);
-    uint8_t leixing = read_value<uint8_t>(zijie_men, pianyi);  // 目前没用，但留着以后用
-    uint32_t yuanshi_changdu = read_value<uint32_t>(zijie_men, pianyi);
-
-    // 检查长度是否合法
-    if (pianyi + yuanshi_changdu > zijie_men.size()) {
-      throw runtime_error("DAT记录已损坏");
-    }
-
-    // 读取原始内容
-    string yuanshi(zijie_men.data() + pianyi, zijie_men.data() + pianyi + yuanshi_changdu);
-    pianyi += yuanshi_changdu;
-
-    (void)leixing;  // 暂时不用类型字段，用set_cell会自动判断
-
-    // 设置单元格
-    set_cell(gongzuobu, to_cell_id({static_cast<int>(hang), static_cast<int>(lie)}), yuanshi);
-  }
-
-  // 重新计算所有公式
-  recalculate_all(gongzuobu);
-  return gongzuobu;
+  return deserialize_workbook_payload(jieyahou);
 }
 
 // 保存DAT文件

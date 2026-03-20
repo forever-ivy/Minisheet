@@ -24,11 +24,14 @@ add_library(minisheet_core
   src/m3_display.cpp
   src/m4_formula.cpp
   src/m5_recalc.cpp
+  third_party/miniz/miniz.c
+  third_party/miniz/miniz_tdef.c
+  third_party/miniz/miniz_tinfl.c
   third_party/tinyexpr/tinyexpr.c
 )
 
 target_include_directories(minisheet_core
-  PUBLIC include
+  PUBLIC include third_party/miniz
   PRIVATE third_party/tinyexpr
 )
 
@@ -53,11 +56,32 @@ if (WIN32)
   target_link_libraries(minisheet_server PRIVATE ws2_32)
 endif()
 
-add_executable(backend_error_messages_test
-  tests/error_messages_test.cpp
-  src/m6_storage.cpp
+set(BACKEND_ERROR_MESSAGES_TEST_SRC
+  ${CMAKE_CURRENT_SOURCE_DIR}/tests/error_messages_test.cpp
 )
 
-target_link_libraries(backend_error_messages_test PRIVATE minisheet_core)
+if (EXISTS ${BACKEND_ERROR_MESSAGES_TEST_SRC})
+  add_executable(backend_error_messages_test
+    tests/error_messages_test.cpp
+    src/m6_storage.cpp
+  )
 
-add_test(NAME backend_error_messages_test COMMAND backend_error_messages_test)
+  target_link_libraries(backend_error_messages_test PRIVATE minisheet_core)
+
+  add_test(NAME backend_error_messages_test COMMAND backend_error_messages_test)
+endif()
+
+set(BACKEND_STORAGE_COMPRESSION_TEST_SRC
+  ${CMAKE_CURRENT_SOURCE_DIR}/tests/storage_compression_test.cpp
+)
+
+if (EXISTS ${BACKEND_STORAGE_COMPRESSION_TEST_SRC})
+  add_executable(storage_compression_test
+    tests/storage_compression_test.cpp
+    src/m6_storage.cpp
+  )
+
+  target_link_libraries(storage_compression_test PRIVATE minisheet_core)
+
+  add_test(NAME storage_compression_test COMMAND storage_compression_test)
+endif()
