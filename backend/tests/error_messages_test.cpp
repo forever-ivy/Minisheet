@@ -121,7 +121,7 @@ int main() {
       "deserialize_workbook unsupported version", "不支持的DAT文件版本",
       [] { (void)deserialize_workbook(make_dat_header(99)); }, shibai_shu);
   expect_exception_message<runtime_error>(
-      "deserialize_workbook corrupt file", "DAT文件已损坏",
+      "deserialize_workbook old version short payload", "不支持的DAT文件版本",
       [] {
         vector<char> zijie_men = {'M', 'S', 'H', 'T'};
         append_u32(zijie_men, 2);
@@ -130,7 +130,7 @@ int main() {
       },
       shibai_shu);
   expect_exception_message<runtime_error>(
-      "deserialize_workbook corrupt record", "DAT记录已损坏",
+      "deserialize_workbook old version record", "不支持的DAT文件版本",
       [] {
         vector<char> zijie_men = make_dat_header(2, 0, 0, 1);
         append_u16(zijie_men, 1);
